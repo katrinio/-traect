@@ -10,6 +10,7 @@ from traect.app.database import create_schema, make_engine, make_session_factory
 from traect.app.errors import NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.web.assets import APP_HTML, APP_JS, ICON_SVG, MANIFEST, SW_JS
 
 
 def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
@@ -20,6 +21,16 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
         path = environ.get("PATH_INFO", "/")
+        if method == "GET" and path in {"/", "/index.html"}:
+            return _respond(start_response, "200 OK", "text/html; charset=utf-8", APP_HTML)
+        if method == "GET" and path == "/app.js":
+            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", APP_JS)
+        if method == "GET" and path == "/manifest.webmanifest":
+            return _respond(start_response, "200 OK", "application/manifest+json", MANIFEST)
+        if method == "GET" and path == "/sw.js":
+            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", SW_JS)
+        if method == "GET" and path == "/icon.svg":
+            return _respond(start_response, "200 OK", "image/svg+xml", ICON_SVG)
         input_stream = cast(Any, environ["wsgi.input"])
         body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
         payload = _load_payload(body)
@@ -46,6 +57,11 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
                 return [json.dumps({"error": str(exc)}).encode()]
 
     return app
+
+
+def _respond(start_response: Callable[..., Any], status: str, content_type: str, body: str) -> list[bytes]:
+    start_response(status, [("Content-Type", content_type), ("Cache-Control", "no-cache")])
+    return [body.encode()]
 
 
 def _dispatch(
