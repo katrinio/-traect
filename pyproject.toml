@@ -1,15 +1,17 @@
 [tool.poetry]
-name = "python-project-template"
+name = "traect"
 version = "0.1.0"
-description = "A starting point for small Python projects."
+description = "Weekly attention tracking across reusable domains."
 authors = ["Katrin Torsunova"]
 readme = "README.md"
 packages = [
-    { include = "src" },
+    { include = "traect", from = "src" },
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.14,<3.15"
+sqlalchemy = "^2.0.0"
+alembic = "^1.13.0"
 
 [build-system]
 requires = ["poetry-core>=1.9.0"]

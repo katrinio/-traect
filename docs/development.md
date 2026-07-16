@@ -1,31 +1,22 @@
 # Development
 
-## Why this exists
-
-- Explain how to work on the project.
-- Keep the focus on the local workflow.
+Use Poetry for local work.
 
 ## Setup
 
-- List the required tools.
-- Add only the steps that are needed.
-
-## Run
-
 ```bash
-command to install
-command to start
-command to test
+poetry install
 ```
 
 ## Checks
 
-- `command one`
-- `command two`
-- `command three`
+```bash
+poetry run ruff check .
+poetry run mypy src
+poetry run pytest tests --cov=src
+```
 
-## Notes
+## Scope
 
-- Add project-specific constraints here.
-- Remove this section if there is nothing to note.
-
+The first implementation focuses on the domain layer and database schema.
+UI work should stay separate from model and migration changes.

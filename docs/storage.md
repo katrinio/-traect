@@ -1,28 +1,25 @@
 # Storage
 
-## Why this exists
+The project stores its data in a SQL database through SQLAlchemy.
 
-- Explain how project data is stored.
-- State what the user owns and controls.
+## What is stored
 
-## Format
+- workspaces
+- domains
+- weeks
+- per-week domain states
 
-- List the storage formats in use.
-- Prefer plain text files where possible.
+## Where it lives
 
-## Location
-
-- Say where the data lives.
-- Keep paths and folders explicit.
+The database location is configured outside the codebase.
+For local development, Alembic defaults to `sqlite:///traect.db` unless `TRAECT_DATABASE_URL` is set.
 
 ## Behavior
 
-- Describe when data is written.
-- Describe when data is read.
-- Note any automatic changes.
+- application writes go through the ORM
+- schema changes are applied with Alembic migrations
+- domain data is not embedded in UI code
 
 ## Notes
 
-- Add backup, migration, or cleanup details here.
-- Remove this section if it is not needed.
-
+The model is intentionally small so it can support future workspace types without a rewrite.

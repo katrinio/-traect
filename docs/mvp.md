@@ -1,28 +1,230 @@
+# -traect
+
+## Философия
+
+-traect — это не трекер привычек, не планировщик и не second brain.
+
+Это еженедельный снимок того, как распределяются жизненные ресурсы.
+
+Цель проекта — не поддерживать все сферы жизни на максимуме одновременно, а понимать, **какие компромиссы принимаются**, как меняется траектория жизни и какие закономерности повторяются.
+
+---
+
 # MVP
 
-## Why this exists
+## Сущности
 
-- State the smallest useful version of the project.
-- Keep the scope explicit.
+### Sphere
 
-## In scope
+Произвольная сфера жизни.
 
-- List the minimum user-facing behavior.
-- Keep the list short.
+Например:
 
-## Out of scope
+- Work
+- Health
+- Sport
+- Projects
+- Friends
+- Home
+- Finance
 
-- List what this version does not do.
-- Remove this section if everything fits in scope.
+Никакой логики — только название и, возможно, цвет или иконка.
 
-## Scenario
+---
 
-```bash
-command one
-command two
+### Week
+
+Еженедельная запись.
+
+Содержит:
+
+- номер недели
+- год
+- основной фокус недели
+- чем пришлось пожертвовать (необязательно)
+- причина (необязательно)
+- заметки (необязательно)
+
+---
+
+### WeekSphere
+
+Состояние одной сферы за конкретную неделю.
+
+Поля:
+
+- сфера
+- статус
+- режим
+- комментарий
+
+Status:
+
+- Good
+- Warning
+- Critical
+
+Mode:
+
+- Focus
+- Maintain
+- Ignore
+
+Пример:
+
+```
+Sport
+
+Status
+🟢 Good
+
+Mode
+Maintain
+
+Comment
+Running twice this week.
 ```
 
-## Rule
+---
 
-- Write the test for whether something belongs in this version.
+## Weekly Summary
 
+Каждая неделя также содержит:
+
+Focus
+
+```
+Work
+```
+
+Sacrificed
+
+```
+Reading
+```
+
+Reason
+
+```
+Release
+```
+
+Notes
+
+```
+Very little sleep.
+```
+
+---
+
+# Экраны
+
+## Home
+
+Текущая неделя.
+
+Показывает состояние всех сфер.
+
+```
+Work      🟢 Focus
+Sport     🟢 Maintain
+Health    🟡 Maintain
+Reading   🔴 Ignore
+Friends   🟢 Maintain
+```
+
+---
+
+## Weekly Check-in
+
+Простая форма, которую можно заполнить за 2–3 минуты.
+
+---
+
+## Timeline
+
+История недель.
+
+```
+2026 W29
+
+Focus
+Work
+
+🟢 Sport
+🟡 Health
+🔴 Reading
+🟢 Friends
+```
+
+---
+
+## Statistics
+
+### Focus history
+
+```
+Work      ████
+Projects  ██
+Health    █
+```
+
+---
+
+### Status history
+
+```
+Health
+
+🟢 74%
+
+🟡 20%
+
+🔴 6%
+```
+
+---
+
+### Sacrifices
+
+```
+Reading
+
+Sacrificed 14 times
+
+Usually because
+
+• Work (8)
+• Health (3)
+• Travel (2)
+```
+
+---
+
+# Что сознательно не входит в MVP
+
+- цели
+- задачи
+- трекер привычек
+- календарь
+- уведомления
+- таймеры
+- интеграции
+- AI-рекомендации
+- ежедневный дневник
+- оценка продуктивности
+
+---
+
+# Долгосрочная цель
+
+-traect должен помогать отвечать на вопросы вроде:
+
+- Что я обычно бросаю первым, когда становится тяжело?
+- Какие сферы чаще всего проседают одновременно?
+- Сколько сфер я действительно могу удерживать в режиме Focus?
+- Что чаще всего становится причиной провалов?
+- Какие жертвы в итоге оказались оправданными?
+- Повторяю ли я одни и те же компромиссы каждые несколько месяцев?
+
+Проект должен стать личным журналом управленческих решений о собственной жизни, а не очередным инструментом продуктивности.
