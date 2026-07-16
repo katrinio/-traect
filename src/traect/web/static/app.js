@@ -167,9 +167,14 @@ function renderReview() {
 function renderReviewDomain(domain, existing) {
   const wrapper = document.createElement("section");
   wrapper.className = "domain";
+  const status = existing?.status || "inactive";
   wrapper.innerHTML = `
     <div class="domain-head">
       <div class="domain-name">${escapeHtml(domain.name)}</div>
+      <div class="status-mark" data-status="${status}">
+        <span class="status-symbol">${statusSymbol(status)}</span>
+        <span class="status-text">${statusLabel(status)}</span>
+      </div>
     </div>
     <div class="domain-grid">
       <label>Status
@@ -399,9 +404,9 @@ function setView(view) {
 
 function statusOptions() {
   return [
-    ["good", "Good"],
-    ["warning", "Warning"],
-    ["critical", "Critical"],
+    ["good", "▲ Focus"],
+    ["warning", "✓ Maintain"],
+    ["critical", "⚠ At Risk"],
   ];
 }
 
@@ -411,6 +416,26 @@ function modeOptions() {
     ["maintain", "Maintain"],
     ["ignore", "Ignore"],
   ];
+}
+
+function statusLabel(status) {
+  const map = {
+    good: "▲ Focus",
+    warning: "✓ Maintain",
+    critical: "⚠ At Risk",
+    inactive: "○ Inactive",
+  };
+  return map[status] || "○ Inactive";
+}
+
+function statusSymbol(status) {
+  const map = {
+    good: "▲",
+    warning: "✓",
+    critical: "⚠",
+    inactive: "○",
+  };
+  return map[status] || "○";
 }
 
 function bySortOrder(left, right) {

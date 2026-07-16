@@ -222,6 +222,18 @@ def test_empty_database_renders_setup_then_weekly_review(tmp_path: Path) -> None
     assert "Weekly review" in review_response["body"]
 
 
+def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> None:
+    database = tmp_path / "traect.db"
+    app = build_app(f"sqlite:///{database}")
+
+    response = _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+    assert response["status"].startswith("200")
+
+    current_workspace = _request(app, "GET", "/workspaces/current")
+    assert current_workspace["status"].startswith("200")
+    assert '"name": "Life"' in current_workspace["body"]
+
+
 def _request(
     app: Callable[[dict[str, object], Callable[..., object]], list[bytes]],
     method: str,

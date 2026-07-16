@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any, cast
+from wsgiref.simple_server import make_server
 
 from traect.app.database import create_schema, make_engine, make_session_factory
 from traect.app.errors import NotFoundError, TraectError, ValidationError
@@ -63,6 +64,10 @@ def _serve_static(start_response: Callable[..., Any], method: str, path: str) ->
     mapping = {
         "/": ("templates/index.html", "text/html; charset=utf-8"),
         "/index.html": ("templates/index.html", "text/html; charset=utf-8"),
+        "/tokens.css": ("static/tokens.css", "text/css; charset=utf-8"),
+        "/typography.css": ("static/typography.css", "text/css; charset=utf-8"),
+        "/layout.css": ("static/layout.css", "text/css; charset=utf-8"),
+        "/components.css": ("static/components.css", "text/css; charset=utf-8"),
         "/app.js": ("static/app.js", "text/javascript; charset=utf-8"),
         "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
@@ -196,3 +201,10 @@ def _load_payload(body: bytes) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValidationError("request body must be a JSON object")
     return cast(dict[str, Any], parsed)
+
+
+def main() -> None:
+    app = build_app("sqlite:///traect.db")
+    with make_server("127.0.0.1", 8000, app) as server:
+        print("Serving on http://127.0.0.1:8000")
+        server.serve_forever()

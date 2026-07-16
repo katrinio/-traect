@@ -58,7 +58,7 @@ class TraectService:
         return workspace
 
     def get_current_workspace(self) -> Workspace:
-        workspace = self.session.execute(select(Workspace).order_by(Workspace.id.asc())).scalar_one_or_none()
+        workspace = self.session.execute(select(Workspace).order_by(Workspace.id.asc())).scalars().first()
         if workspace is None:
             raise NotFoundError("workspace not found")
         return workspace
