@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping
 from datetime import date
+from pathlib import Path
 from typing import Any, cast
-from urllib.parse import parse_qs
 
 from traect.app.database import create_schema, make_engine, make_session_factory
 from traect.app.errors import NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
-from traect.web.assets import APP_HTML, APP_JS, ICON_SVG, MANIFEST, SW_JS
+
+WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
 
 
 def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
@@ -21,25 +22,17 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
         path = environ.get("PATH_INFO", "/")
-        if method == "GET" and path in {"/", "/index.html"}:
-            return _respond(start_response, "200 OK", "text/html; charset=utf-8", APP_HTML)
-        if method == "GET" and path == "/app.js":
-            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", APP_JS)
-        if method == "GET" and path == "/manifest.webmanifest":
-            return _respond(start_response, "200 OK", "application/manifest+json", MANIFEST)
-        if method == "GET" and path == "/sw.js":
-            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", SW_JS)
-        if method == "GET" and path == "/icon.svg":
-            return _respond(start_response, "200 OK", "image/svg+xml", ICON_SVG)
+        static = _serve_static(start_response, method, path)
+        if static is not None:
+            return static
         input_stream = cast(Any, environ["wsgi.input"])
         body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
         payload = _load_payload(body)
-        query = parse_qs(environ.get("QUERY_STRING", ""))
 
         with session_factory() as session:
             service = TraectService(session)
             try:
-                result = _dispatch(service, method, path, payload, query)
+                result = _dispatch(service, method, path, payload)
                 session.commit()
                 start_response("200 OK", [("Content-Type", "application/json")])
                 return [json.dumps(result, default=_json_default).encode()]
@@ -64,12 +57,33 @@ def _respond(start_response: Callable[..., Any], status: str, content_type: str,
     return [body.encode()]
 
 
-def _dispatch(
-    service: TraectService, method: str, path: str, payload: dict[str, Any], query: dict[str, list[str]]
-) -> Any:
+def _serve_static(start_response: Callable[..., Any], method: str, path: str) -> list[bytes] | None:
+    if method != "GET":
+        return None
+    mapping = {
+        "/": ("templates/index.html", "text/html; charset=utf-8"),
+        "/index.html": ("templates/index.html", "text/html; charset=utf-8"),
+        "/app.js": ("static/app.js", "text/javascript; charset=utf-8"),
+        "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
+        "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
+        "/icon.svg": ("static/icon.svg", "image/svg+xml"),
+    }
+    if path not in mapping:
+        return None
+    relative_path, content_type = mapping[path]
+    body = (WEB_ROOT / relative_path).read_text(encoding="utf-8")
+    return _respond(start_response, "200 OK", content_type, body)
+
+
+def _dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any]) -> Any:
     parts = [part for part in path.split("/") if part]
     if method == "POST" and parts == ["workspaces"]:
+        domains = [item["name"] for item in payload.get("domains", [])]
+        if domains:
+            return _workspace(service.create_workspace_with_domains(payload["name"], domains))
         return _workspace(service.create_workspace(payload["name"]))
+    if method == "GET" and parts == ["workspaces", "current"]:
+        return _workspace(service.get_current_workspace())
     if method == "GET" and len(parts) == 2 and parts[0] == "workspaces":
         return _workspace(service.get_workspace(int(parts[1])))
     if method == "POST" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
@@ -115,8 +129,6 @@ def _dispatch(
             states=states or None,
         )
         return _week(week)
-    if method == "GET" and parts == ["workspaces"] and "workspace_id" in query:
-        return {}
     if (
         method == "GET"
         and len(parts) == 4

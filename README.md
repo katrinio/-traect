@@ -69,3 +69,29 @@ Backend exposes небольшой HTTP surface:
 - status, mode и comment для каждого domain
 - focus, sacrificed, reason и notes for the week
 - одну save action
+
+## Workspace setup
+
+Если база пустая, app открывает setup screen.
+
+Он позволяет:
+
+- задать `Workspace` name
+- добавить initial `Domain`
+- удалить `Domain` до сохранения
+- reorder `Domain` до сохранения
+- создать `Workspace` и initial `Domain` одним действием
+
+## Domain management
+
+Для существующего `Workspace` доступен минимальный screen управления `Domain`.
+
+Он позволяет:
+
+- создать `Domain`
+- переименовать `Domain`
+- reorder active `Domain`
+- archive `Domain`
+- restore archived `Domain`
+
+Archived `Domain` остаются в historical weekly reviews, но не попадают в new weekly check-ins автоматически.

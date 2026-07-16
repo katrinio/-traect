@@ -32,8 +32,6 @@ jobs:
   tests-and-coverage:
     name: Tests and coverage
     runs-on: ubuntu-latest
-    # Disable this job until the coverage gate is needed again.
-    if: ${{ false }}
 
     steps:
       - uses: actions/checkout@v5
