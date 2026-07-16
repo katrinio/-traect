@@ -5,7 +5,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from traect.db.base import Base
-from traect.domain import models  # noqa: F401
+from traect.domain import models as _models  # noqa: F401
 
 
 def make_engine(database_url: str) -> Engine:
@@ -18,4 +18,3 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
 
 def create_schema(engine: Engine) -> None:
     Base.metadata.create_all(engine)
-

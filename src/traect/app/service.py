@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -98,7 +98,7 @@ class TraectService:
 
     def archive_domain(self, domain_id: int) -> Domain:
         domain = self.get_domain(domain_id)
-        domain.archived_at = datetime.now(timezone.utc)
+        domain.archived_at = datetime.now(UTC)
         self.session.flush()
         return domain
 
@@ -176,7 +176,9 @@ class TraectService:
 
     def list_weeks(self, workspace_id: int) -> list[Week]:
         workspace = self.get_workspace(workspace_id)
-        stmt = select(Week).where(Week.workspace_id == workspace.id).order_by(Week.iso_year.desc(), Week.iso_week.desc())
+        stmt = (
+            select(Week).where(Week.workspace_id == workspace.id).order_by(Week.iso_year.desc(), Week.iso_week.desc())
+        )
         return list(self.session.execute(stmt).scalars())
 
     def get_domain(self, domain_id: int) -> Domain:
@@ -203,8 +205,12 @@ class TraectService:
             self.session.flush()
         return week
 
-    def _ensure_active_domain_name_unique(self, workspace_id: int, name: str, *, exclude_domain_id: int | None = None) -> None:
-        stmt = select(Domain).where(Domain.workspace_id == workspace_id, Domain.name == name, Domain.archived_at.is_(None))
+    def _ensure_active_domain_name_unique(
+        self, workspace_id: int, name: str, *, exclude_domain_id: int | None = None
+    ) -> None:
+        stmt = select(Domain).where(
+            Domain.workspace_id == workspace_id, Domain.name == name, Domain.archived_at.is_(None)
+        )
         if exclude_domain_id is not None:
             stmt = stmt.where(Domain.id != exclude_domain_id)
         if self.session.execute(stmt).scalar_one_or_none() is not None:

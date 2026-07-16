@@ -7,8 +7,8 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Integer,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -31,10 +31,10 @@ class Workspace(Base):
         DateTime(timezone=True), init=False, server_default=func.now(), onupdate=func.now()
     )
 
-    domains: Mapped[list["Domain"]] = relationship(
+    domains: Mapped[list[Domain]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan", default_factory=list
     )
-    weeks: Mapped[list["Week"]] = relationship(
+    weeks: Mapped[list[Week]] = relationship(
         back_populates="workspace", cascade="all, delete-orphan", default_factory=list
     )
 
@@ -62,7 +62,7 @@ class Domain(Base):
     )
 
     workspace: Mapped[Workspace] = relationship(back_populates="domains", init=False)
-    week_states: Mapped[list["WeekDomainState"]] = relationship(back_populates="domain", default_factory=list)
+    week_states: Mapped[list[WeekDomainState]] = relationship(back_populates="domain", default_factory=list)
 
 
 class Week(Base):
@@ -89,12 +89,10 @@ class Week(Base):
     )
 
     workspace: Mapped[Workspace] = relationship(back_populates="weeks", init=False)
-    domain_states: Mapped[list["WeekDomainState"]] = relationship(
+    domain_states: Mapped[list[WeekDomainState]] = relationship(
         back_populates="week", cascade="all, delete-orphan", default_factory=list
     )
-    focus_domain: Mapped[Domain | None] = relationship(
-        foreign_keys=[focus_domain_id], init=False, post_update=True
-    )
+    focus_domain: Mapped[Domain | None] = relationship(foreign_keys=[focus_domain_id], init=False, post_update=True)
     sacrificed_domain: Mapped[Domain | None] = relationship(
         foreign_keys=[sacrificed_domain_id], init=False, post_update=True
     )

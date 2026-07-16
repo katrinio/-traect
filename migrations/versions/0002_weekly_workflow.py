@@ -7,8 +7,8 @@ Create Date: 2026-07-16 00:00:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0002_weekly_workflow"
 down_revision = "0001_initial_schema"
@@ -31,7 +31,9 @@ def upgrade() -> None:
         batch.add_column(sa.Column("sacrificed_domain_id", sa.Integer(), nullable=True))
         batch.drop_column("focus_domain_name")
         batch.drop_column("sacrificed_domain_name")
-        batch.create_foreign_key("fk_week_focus_domain_id_domain", "domain", ["focus_domain_id"], ["id"], ondelete="SET NULL")
+        batch.create_foreign_key(
+            "fk_week_focus_domain_id_domain", "domain", ["focus_domain_id"], ["id"], ondelete="SET NULL"
+        )
         batch.create_foreign_key(
             "fk_week_sacrificed_domain_id_domain", "domain", ["sacrificed_domain_id"], ["id"], ondelete="SET NULL"
         )

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,7 +10,7 @@ from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
 
 
-@pytest.fixture()
+@pytest.fixture
 def session() -> Session:
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     create_schema(engine)
@@ -113,7 +111,10 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
     service.archive_domain(health.id)
 
     historical = service.list_weeks(workspace.id)
-    assert historical[0].domain_states and {state.domain_id for state in historical[0].domain_states} == {work.id, health.id}
+    assert historical[0].domain_states and {state.domain_id for state in historical[0].domain_states} == {
+        work.id,
+        health.id,
+    }
 
     next_week = service.upsert_week(
         workspace.id,
@@ -141,4 +142,3 @@ def test_cross_workspace_relationship_validation(session: Session) -> None:
 
     with pytest.raises(ValidationError):
         service.reorder_domains(workspace_b.id, [domain_a.id])
-

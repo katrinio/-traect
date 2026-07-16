@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs
 
 from traect.app.database import create_schema, make_engine, make_session_factory
@@ -12,16 +12,17 @@ from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
 
 
-def build_app(database_url: str) -> Callable[[dict[str, Any], Callable[..., Any]], list[bytes]]:
+def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
     engine = make_engine(database_url)
     create_schema(engine)
     session_factory = make_session_factory(engine)
 
-    def app(environ: dict[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
+    def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
         path = environ.get("PATH_INFO", "/")
-        body = environ.get("wsgi.input").read(int(environ.get("CONTENT_LENGTH", "0") or 0))
-        payload = json.loads(body) if body else None
+        input_stream = cast(Any, environ["wsgi.input"])
+        body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
+        payload = _load_payload(body)
         query = parse_qs(environ.get("QUERY_STRING", ""))
 
         with session_factory() as session:
@@ -47,7 +48,9 @@ def build_app(database_url: str) -> Callable[[dict[str, Any], Callable[..., Any]
     return app
 
 
-def _dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any] | None, query: dict[str, list[str]]) -> Any:
+def _dispatch(
+    service: TraectService, method: str, path: str, payload: dict[str, Any], query: dict[str, list[str]]
+) -> Any:
     parts = [part for part in path.split("/") if part]
     if method == "POST" and parts == ["workspaces"]:
         return _workspace(service.create_workspace(payload["name"]))
@@ -59,7 +62,13 @@ def _dispatch(service: TraectService, method: str, path: str, payload: dict[str,
     if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
         domains = service.list_domains(int(parts[1]))
         return {"items": [_domain(domain) for domain in domains]}
-    if method == "PUT" and len(parts) == 4 and parts[0] == "workspaces" and parts[2] == "domains" and parts[3] == "order":
+    if (
+        method == "PUT"
+        and len(parts) == 4
+        and parts[0] == "workspaces"
+        and parts[2] == "domains"
+        and parts[3] == "order"
+    ):
         domains = service.reorder_domains(int(parts[1]), [int(domain_id) for domain_id in payload["domain_ids"]])
         return {"items": [_domain(domain) for domain in domains]}
     if method == "PATCH" and len(parts) == 2 and parts[0] == "domains":
@@ -92,7 +101,13 @@ def _dispatch(service: TraectService, method: str, path: str, payload: dict[str,
         return _week(week)
     if method == "GET" and parts == ["workspaces"] and "workspace_id" in query:
         return {}
-    if method == "GET" and len(parts) == 4 and parts[0] == "workspaces" and parts[2] == "weeks" and parts[3] == "current":
+    if (
+        method == "GET"
+        and len(parts) == 4
+        and parts[0] == "workspaces"
+        and parts[2] == "weeks"
+        and parts[3] == "current"
+    ):
         return _week(service.get_current_week(int(parts[1])))
     if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "weeks":
         weeks = service.list_weeks(int(parts[1]))
@@ -144,3 +159,12 @@ def _json_default(value: Any) -> Any:
     if hasattr(value, "value"):
         return value.value
     return str(value)
+
+
+def _load_payload(body: bytes) -> dict[str, Any]:
+    if not body:
+        return {}
+    parsed = json.loads(body)
+    if not isinstance(parsed, dict):
+        raise ValidationError("request body must be a JSON object")
+    return cast(dict[str, Any], parsed)

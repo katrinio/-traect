@@ -1,2 +1,1 @@
 """Database primitives for Traect."""
-

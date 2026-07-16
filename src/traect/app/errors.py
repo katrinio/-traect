@@ -11,4 +11,3 @@ class NotFoundError(TraectError):
 
 class ValidationError(TraectError):
     pass
-
