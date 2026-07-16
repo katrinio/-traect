@@ -22,42 +22,35 @@
         <div class="meta" id="save-state"></div>
       </header>
 
-      <nav aria-label="Sections">
-        <button class="tab" type="button" data-view="review" aria-selected="true">Weekly Review</button>
-        <button class="tab" type="button" data-view="domains" aria-selected="false">Workspace Setup / Domains</button>
+      <nav aria-label="Sections" id="main-nav">
+        <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
+        <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
       </nav>
 
       <main>
-        <section id="setup-view" class="setup">
-          <div>
-            <h2 class="section-title">Workspace setup</h2>
-            <p class="hint">A Workspace holds the areas you want to track. Keep the names neutral so the same structure can work for Life, Projects, Career, or something else later.</p>
-          </div>
-          <form id="setup-form" class="split">
-            <label>Workspace name
-              <input name="workspace_name" type="text" autocomplete="off" required>
-            </label>
-            <div>
-              <div class="toolbar">
-                <h3 class="section-title">Initial Domains</h3>
-                <button class="ghost" type="button" id="add-domain">Add Domain</button>
-              </div>
-              <div id="setup-domains" class="domains"></div>
-            </div>
-            <div class="status" id="setup-status"></div>
-            <div class="actions actions-left">
-              <button class="primary" type="submit">Create Workspace</button>
-            </div>
-          </form>
-        </section>
-
-        <section id="review-view" class="hidden">
+        <section id="current-view">
           <div class="toolbar">
             <div>
-              <h2 class="section-title">Weekly review</h2>
+              <h2 class="section-title">Current</h2>
               <div class="meta" id="week-meta"></div>
             </div>
             <div class="meta" id="domain-count"></div>
+          </div>
+
+          <section class="current-groups" id="current-groups"></section>
+
+          <div class="actions actions-left">
+            <button class="secondary" type="button" id="edit-review">Edit review</button>
+          </div>
+        </section>
+
+        <section id="edit-view" class="hidden">
+          <div class="toolbar">
+            <div>
+              <h2 class="section-title">Edit review</h2>
+              <div class="meta" id="edit-week-meta"></div>
+            </div>
+            <div class="meta" id="edit-domain-count"></div>
           </div>
 
           <form id="review-form" class="split">
@@ -80,6 +73,7 @@
             </section>
 
             <div class="actions">
+              <button class="secondary" type="button" id="back-to-current">Back</button>
               <button class="primary" type="submit">Save</button>
             </div>
             <div class="status" id="review-status"></div>
