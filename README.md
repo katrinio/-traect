@@ -31,6 +31,31 @@ The UI may call these areas “Spheres” later, but the data model stays neutra
 - notifications
 - AI recommendations
 
-## Project direction
+## Implemented backend workflow
 
-The first implementation focuses on the domain model, database schema, and migration structure. UI comes later.
+The first functional slice now supports:
+
+- creating a workspace
+- creating, renaming, listing, reordering, archiving, and restoring domains
+- creating or updating a weekly review for a workspace
+- storing one state per active domain for a week
+- retrieving the current week
+- listing past weeks in reverse chronological order
+
+## HTTP API
+
+The backend exposes a small HTTP surface:
+
+- `POST /workspaces`
+- `GET /workspaces/{workspace_id}`
+- `POST /workspaces/{workspace_id}/domains`
+- `GET /workspaces/{workspace_id}/domains`
+- `PUT /workspaces/{workspace_id}/domains/order`
+- `PATCH /domains/{domain_id}`
+- `POST /domains/{domain_id}/archive`
+- `POST /domains/{domain_id}/restore`
+- `PUT /workspaces/{workspace_id}/weeks/{iso_year}/{iso_week}`
+- `GET /workspaces/{workspace_id}/weeks/current`
+- `GET /workspaces/{workspace_id}/weeks`
+
+UI comes later.

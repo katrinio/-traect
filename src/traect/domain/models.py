@@ -8,10 +8,12 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    Index,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,20 +41,28 @@ class Workspace(Base):
 
 class Domain(Base):
     __tablename__ = "domain"
-    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_domain_workspace_name"),)
+    __table_args__ = (
+        Index(
+            "uq_domain_workspace_active_name",
+            "workspace_id",
+            "name",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, init=False)
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True, init=False)
     name: Mapped[str] = mapped_column(String(120))
+    sort_order: Mapped[int] = mapped_column(Integer)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), init=False, server_default=func.now(), onupdate=func.now()
     )
 
     workspace: Mapped[Workspace] = relationship(back_populates="domains", init=False)
-    week_states: Mapped[list["WeekDomainState"]] = relationship(
-        back_populates="domain", cascade="all, delete-orphan", default_factory=list
-    )
+    week_states: Mapped[list["WeekDomainState"]] = relationship(back_populates="domain", default_factory=list)
 
 
 class Week(Base):
@@ -65,10 +75,14 @@ class Week(Base):
     iso_week: Mapped[int] = mapped_column(Integer)
     starts_on: Mapped[date] = mapped_column(Date)
     ends_on: Mapped[date] = mapped_column(Date)
-    focus_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    sacrificed_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    sacrifice_reason: Mapped[str | None] = mapped_column(String(240), nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    focus_domain_id: Mapped[int | None] = mapped_column(
+        ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+    sacrificed_domain_id: Mapped[int | None] = mapped_column(
+        ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
+    )
+    sacrifice_reason: Mapped[str | None] = mapped_column(String(240), nullable=True, default=None)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), init=False, server_default=func.now(), onupdate=func.now()
@@ -77,6 +91,12 @@ class Week(Base):
     workspace: Mapped[Workspace] = relationship(back_populates="weeks", init=False)
     domain_states: Mapped[list["WeekDomainState"]] = relationship(
         back_populates="week", cascade="all, delete-orphan", default_factory=list
+    )
+    focus_domain: Mapped[Domain | None] = relationship(
+        foreign_keys=[focus_domain_id], init=False, post_update=True
+    )
+    sacrificed_domain: Mapped[Domain | None] = relationship(
+        foreign_keys=[sacrificed_domain_id], init=False, post_update=True
     )
 
 
