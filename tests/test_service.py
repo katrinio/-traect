@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from io import BytesIO
+from pathlib import Path
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from traect.api.app import build_app
 from traect.app.database import create_schema
 from traect.app.errors import ValidationError
 from traect.app.service import TraectService, WeekStateInput
@@ -39,6 +44,33 @@ def test_unique_active_domain_name(session: Session) -> None:
         service.create_domain(workspace.id, "Work")
 
 
+def test_unique_active_domain_name_is_case_insensitive(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError):
+        service.create_domain(workspace.id, "work")
+
+
+def test_create_workspace_with_initial_domains(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace_with_domains("Life", ["Work", "Health"])
+
+    assert workspace.id is not None
+    assert [domain.name for domain in service.list_domains(workspace.id, include_archived=False)] == ["Work", "Health"]
+
+
+def test_setup_validation_rejects_empty_and_duplicate_domains(session: Session) -> None:
+    service = TraectService(session)
+
+    with pytest.raises(ValidationError):
+        service.create_workspace_with_domains("Life", ["", "Work"])
+
+    with pytest.raises(ValidationError):
+        service.create_workspace_with_domains("Life", ["Work", "work"])
+
+
 def test_reorder_archive_restore(session: Session) -> None:
     service = TraectService(session)
     workspace = service.create_workspace("Life")
@@ -54,6 +86,16 @@ def test_reorder_archive_restore(session: Session) -> None:
     restored = service.restore_domain(first.id)
     assert restored.archived_at is None
     assert [domain.id for domain in service.list_domains(workspace.id, include_archived=False)] == [second.id, first.id]
+
+
+def test_rename_domain(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    domain = service.create_domain(workspace.id, "Work")
+
+    updated = service.update_domain(domain.id, name="Focus")
+
+    assert updated.name == "Focus"
 
 
 def test_week_upsert_is_idempotent(session: Session) -> None:
@@ -125,6 +167,22 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
     assert {state.domain_id for state in next_week.domain_states} == {work.id}
 
 
+def test_historical_states_remain_available_after_archival(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        28,
+        states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+    )
+    service.archive_domain(work.id)
+
+    assert week.domain_states[0].domain_id == work.id
+
+
 def test_cross_workspace_relationship_validation(session: Session) -> None:
     service = TraectService(session)
     workspace_a = service.create_workspace("A")
@@ -142,3 +200,49 @@ def test_cross_workspace_relationship_validation(session: Session) -> None:
 
     with pytest.raises(ValidationError):
         service.reorder_domains(workspace_b.id, [domain_a.id])
+
+
+def test_empty_database_renders_setup_then_weekly_review(tmp_path: Path) -> None:
+    database = tmp_path / "traect.db"
+    app = build_app(f"sqlite:///{database}")
+
+    setup_response = _request(app, "GET", "/")
+    assert setup_response["status"].startswith("200")
+    assert "Workspace setup" in setup_response["body"]
+
+    create_response = _request(
+        app,
+        "POST",
+        "/workspaces",
+        body=b'{"name":"Life","domains":[{"name":"Work"},{"name":"Health"}]}',
+    )
+    assert create_response["status"].startswith("200")
+
+    review_response = _request(app, "GET", "/")
+    assert "Weekly review" in review_response["body"]
+
+
+def _request(
+    app: Callable[[dict[str, object], Callable[..., object]], list[bytes]],
+    method: str,
+    path: str,
+    *,
+    body: bytes = b"",
+) -> dict[str, str]:
+    status_line = ""
+    headers: list[tuple[str, str]] = []
+
+    def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+        nonlocal status_line, headers
+        status_line = status
+        headers = response_headers
+
+    environ = {
+        "REQUEST_METHOD": method,
+        "PATH_INFO": path,
+        "QUERY_STRING": "",
+        "CONTENT_LENGTH": str(len(body)),
+        "wsgi.input": BytesIO(body),
+    }
+    response_body = b"".join(app(environ, start_response)).decode()
+    return {"status": status_line, "body": response_body, "headers": str(headers)}

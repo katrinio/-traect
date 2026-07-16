@@ -30,8 +30,24 @@ class TraectService:
         self.session = session
 
     def create_workspace(self, name: str) -> Workspace:
+        self._validate_workspace_name(name)
         workspace = Workspace(name=name)
         self.session.add(workspace)
+        self.session.flush()
+        return workspace
+
+    def create_workspace_with_domains(self, name: str, domain_names: list[str]) -> Workspace:
+        self._validate_workspace_name(name)
+        cleaned_names = [self._normalize_domain_name(domain_name) for domain_name in domain_names]
+        if not cleaned_names or any(not domain_name for domain_name in cleaned_names):
+            raise ValidationError("at least one domain is required")
+        if len({domain_name.casefold() for domain_name in cleaned_names}) != len(cleaned_names):
+            raise ValidationError("domain names must be unique within a workspace")
+        workspace = self.create_workspace(name)
+        for index, domain_name in enumerate(cleaned_names):
+            domain = Domain(name=domain_name, sort_order=index)
+            domain.workspace_id = workspace.id
+            self.session.add(domain)
         self.session.flush()
         return workspace
 
@@ -41,20 +57,21 @@ class TraectService:
             raise NotFoundError("workspace not found")
         return workspace
 
+    def get_current_workspace(self) -> Workspace:
+        workspace = self.session.execute(select(Workspace).order_by(Workspace.id.asc())).scalar_one_or_none()
+        if workspace is None:
+            raise NotFoundError("workspace not found")
+        return workspace
+
     def create_domain(self, workspace_id: int, name: str) -> Domain:
         workspace = self.get_workspace(workspace_id)
-        existing = self.session.execute(
-            select(Domain).where(
-                Domain.workspace_id == workspace.id,
-                Domain.name == name,
-                Domain.archived_at.is_(None),
-            )
-        ).scalar_one_or_none()
-        if existing is not None:
-            raise ValidationError("active domain name must be unique within a workspace")
+        cleaned_name = self._normalize_domain_name(name)
+        if not cleaned_name:
+            raise ValidationError("domain name is required")
+        self._ensure_active_domain_name_unique(workspace.id, cleaned_name)
 
         next_order = self._next_domain_sort_order(workspace.id)
-        domain = Domain(name=name, sort_order=next_order)
+        domain = Domain(name=cleaned_name, sort_order=next_order)
         domain.workspace_id = workspace.id
         domain.archived_at = None
         self.session.add(domain)
@@ -72,8 +89,11 @@ class TraectService:
     def update_domain(self, domain_id: int, *, name: str | None = None, sort_order: int | None = None) -> Domain:
         domain = self.get_domain(domain_id)
         if name is not None:
-            self._ensure_active_domain_name_unique(domain.workspace_id, name, exclude_domain_id=domain.id)
-            domain.name = name
+            cleaned_name = self._normalize_domain_name(name)
+            if not cleaned_name:
+                raise ValidationError("domain name is required")
+            self._ensure_active_domain_name_unique(domain.workspace_id, cleaned_name, exclude_domain_id=domain.id)
+            domain.name = cleaned_name
         if sort_order is not None:
             domain.sort_order = sort_order
         self.session.flush()
@@ -208,12 +228,12 @@ class TraectService:
     def _ensure_active_domain_name_unique(
         self, workspace_id: int, name: str, *, exclude_domain_id: int | None = None
     ) -> None:
-        stmt = select(Domain).where(
-            Domain.workspace_id == workspace_id, Domain.name == name, Domain.archived_at.is_(None)
-        )
+        normalized_name = name.casefold()
+        stmt = select(Domain.name).where(Domain.workspace_id == workspace_id, Domain.archived_at.is_(None))
         if exclude_domain_id is not None:
             stmt = stmt.where(Domain.id != exclude_domain_id)
-        if self.session.execute(stmt).scalar_one_or_none() is not None:
+        names = [row[0].casefold() for row in self.session.execute(stmt).all()]
+        if normalized_name in names:
             raise ValidationError("active domain name must be unique within a workspace")
 
     def _validate_domain_in_workspace(self, domain_id: int, workspace_id: int) -> Domain:
@@ -226,3 +246,10 @@ class TraectService:
         stmt = select(func.max(Domain.sort_order)).where(Domain.workspace_id == workspace_id)
         current_max = self.session.execute(stmt).scalar_one()
         return 0 if current_max is None else current_max + 1
+
+    def _validate_workspace_name(self, name: str) -> None:
+        if not self._normalize_domain_name(name):
+            raise ValidationError("workspace name is required")
+
+    def _normalize_domain_name(self, name: str) -> str:
+        return name.strip()
