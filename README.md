@@ -58,4 +58,14 @@ The backend exposes a small HTTP surface:
 - `GET /workspaces/{workspace_id}/weeks/current`
 - `GET /workspaces/{workspace_id}/weeks`
 
-UI comes later.
+## First screen
+
+The app now serves the Weekly Review page as the first usable screen.
+
+It shows:
+
+- the current ISO week
+- every active domain
+- status, mode, and comment fields for each domain
+- focus, sacrificed, reason, and notes for the week
+- a single save action
