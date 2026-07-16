@@ -1,0 +1,32 @@
+default_language_version:
+  python: python3.14
+
+exclude: >
+  (?x)^(
+    .*\.pytest_cache/|
+    .*\.ruff_cache/|
+    .*\.venv/
+  )
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-ast
+      - id: debug-statements
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: poetry run mypy src --no-incremental
+        language: system
+        pass_filenames: false

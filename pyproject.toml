@@ -1,0 +1,83 @@
+[tool.poetry]
+name = "python-project-template"
+version = "0.1.0"
+description = "A starting point for small Python projects."
+authors = ["Katrin Torsunova"]
+readme = "README.md"
+packages = [
+    { include = "src" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.14,<3.15"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+omit = [
+    "src/**/__init__.py",
+]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "raise SystemExit",
+]
+
+[tool.mypy]
+python_version = "3.14"
+ignore_missing_imports = false
+warn_unused_ignores = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E", "W",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "RET",
+    "RUF",
+    "PLE",
+    "PLW",
+    "PLR",
+    "PT",
+]
+ignore = [
+    "E731", # lambdas
+    "PT018", # multiple in-place asserts
+    "B023", # lambda definition closures
+    "B904", # raise() without implicit from
+    "B905", # strict-less zip
+    "RUF012", # mutable class attrs without ClassVar
+    "PLR2004", "PLR0913", "PLR0915", "PLR0911", "PLR0912", # pylint checks
+    "COM812", "ISC001", # Ruff format conflicts
+]
+
+# Allow underscore-prefixed unused variables.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.14,<0.16.0",
+    "mypy==1.19.1",
+    "pytest>=9.0.0,<10.0.0",
+    "pytest-cov>=7.1.0,<8.0.0",
+    "pre-commit>=4.6.0,<5.0.0",
+]

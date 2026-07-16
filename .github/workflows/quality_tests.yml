@@ -1,0 +1,58 @@
+name: Quality tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  code-style:
+    name: Code style
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run Ruff
+        run: poetry run ruff check .
+
+      - name: Run MyPy
+        run: poetry run mypy src
+
+  tests-and-coverage:
+    name: Tests and coverage
+    runs-on: ubuntu-latest
+    # Disable this job until the coverage gate is needed again.
+    if: ${{ false }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run tests and coverage
+        run: |
+          poetry run pytest tests \
+            --cov=src \
+            --cov-report=term-missing \
+            -q \
+            -ra \
+            --durations=10
