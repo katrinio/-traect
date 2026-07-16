@@ -58,17 +58,44 @@ Backend exposes небольшой HTTP surface:
 - `GET /workspaces/{workspace_id}/weeks/current`
 - `GET /workspaces/{workspace_id}/weeks`
 
-## First screen
+## UI flow
 
-Сейчас app показывает Weekly Review page как первый usable screen.
+После onboarding app работает через три основных screen:
+
+- `Current` — compact read-only overview current ISO week
+- `Edit review` — weekly review editor
+- `Domains` — minimal domain management
+
+`Current` отвечает на один вопрос: что происходит сейчас.
+
+Он группирует active `Domain` by `Mode`:
+
+- `Focus`
+- `Maintain`
+- `Ignore`
+
+`Status` остается отдельным concept и только annotates domain row:
+
+- `Stable`
+- `At Risk`
+- `Critical`
+
+Так `Mode` и `Status` не смешиваются в один control или one visual bucket.
+
+## Edit review
+
+`Edit review` редактирует current ISO week.
 
 Он содержит:
 
-- current ISO week
-- every active domain
-- status, mode и comment для каждого domain
-- focus, sacrificed, reason и notes for the week
-- одну save action
+- mode for each active domain
+- status for each active domain
+- optional comment for each domain
+- focus
+- sacrificed
+- reason
+- notes
+- save action
 
 ## Workspace setup
 
@@ -81,6 +108,8 @@ Backend exposes небольшой HTTP surface:
 - удалить `Domain` до сохранения
 - reorder `Domain` до сохранения
 - создать `Workspace` и initial `Domain` одним действием
+
+После успешного создания `Workspace` setup disappears and app moves to `Current`.
 
 ## Domain management
 

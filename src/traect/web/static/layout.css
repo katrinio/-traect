@@ -57,6 +57,21 @@ section {
   gap: var(--space-3);
 }
 
+.current-groups {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.domain-group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.rule {
+  border-bottom: 1px solid var(--border);
+  width: 100%;
+}
+
 .domain {
   display: grid;
   gap: var(--space-3);

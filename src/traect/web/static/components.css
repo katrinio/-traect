@@ -99,18 +99,6 @@ button:focus {
   color: var(--focus-blue);
 }
 
-.status-mark[data-status="warning"] {
-  color: var(--risk-amber);
-}
-
-.status-mark[data-status="critical"] {
-  color: var(--risk-amber);
-}
-
-.status-mark[data-status="inactive"] {
-  color: var(--inactive-gray);
-}
-
 .status-mark[data-status="good"] .status-text,
 .status-mark[data-status="warning"] .status-text,
 .status-mark[data-status="critical"] .status-text,
@@ -127,7 +115,7 @@ button:focus {
 }
 
 .status-mark[data-status="critical"] .status-symbol {
-  color: var(--risk-amber);
+  color: var(--critical);
 }
 
 .status-mark[data-status="inactive"] .status-symbol {

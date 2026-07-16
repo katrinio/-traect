@@ -219,7 +219,8 @@ def test_empty_database_renders_setup_then_weekly_review(tmp_path: Path) -> None
     assert create_response["status"].startswith("200")
 
     review_response = _request(app, "GET", "/")
-    assert "Weekly review" in review_response["body"]
+    assert "Current" in review_response["body"]
+    assert "Workspace setup" not in review_response["body"]
 
 
 def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> None:
@@ -232,6 +233,19 @@ def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> No
     current_workspace = _request(app, "GET", "/workspaces/current")
     assert current_workspace["status"].startswith("200")
     assert '"name": "Life"' in current_workspace["body"]
+
+
+def test_root_navigation_exposes_only_current_and_domains(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+
+    response = _request(app, "GET", "/")
+
+    assert response["status"].startswith("200")
+    assert "Current" in response["body"]
+    assert "Domains" in response["body"]
+    assert "Workspace Setup / Domains" not in response["body"]
+    assert "Workspace setup" not in response["body"]
 
 
 def _request(
