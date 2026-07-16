@@ -1,2 +1,1 @@
 """Traect domain package."""
-
