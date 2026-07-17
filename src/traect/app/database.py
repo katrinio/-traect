@@ -86,6 +86,8 @@ def detect_legacy_revision(connection: Connection) -> str | None:
             and {"attention", "condition"} <= state_columns
             and {"focus_domain_id", "focus_domain_name"}.isdisjoint(week_columns)
         ):
+            if {"corrected_at", "correction_note", "revision"} <= week_columns:
+                return "0007_historical_week_corrections"
             return "0006_canonical_focus_source"
         if "domain_name" in state_columns and {"focus_domain_name", "sacrificed_domain_name"} <= week_columns:
             if {"attention", "condition"} <= state_columns:

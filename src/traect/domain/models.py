@@ -85,6 +85,9 @@ class Week(Base):
     sacrificed_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
     sacrifice_reason: Mapped[str | None] = mapped_column(String(240), nullable=True, default=None)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    corrected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
+    correction_note: Mapped[str | None] = mapped_column(String(300), nullable=True, default=None)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), init=False, server_default=func.now(), onupdate=func.now()
