@@ -3,26 +3,33 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Mapping
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
 from wsgiref.simple_server import make_server
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
+from traect.api.routes import dispatch
 from traect.app.database import make_engine, make_session_factory, migrate_schema
-from traect.app.errors import NotFoundError, TraectError, ValidationError
-from traect.app.service import TraectService, WeekStateInput
-from traect.domain.enums import DomainAttention, DomainCondition
+from traect.app.errors import ConflictError, NotFoundError, TraectError, ValidationError
+from traect.app.service import TraectService
 from traect.domain.models import Workspace
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
 
 
-def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
+def build_app(
+    database_url: str,
+    *,
+    clock: Callable[[], datetime] | None = None,
+    timezone_name: str | None = None,
+) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
     engine = make_engine(database_url)
     migrate_schema(engine)
     session_factory = make_session_factory(engine)
+    timezone = ZoneInfo(timezone_name or os.environ.get("TRAECT_TIMEZONE", "UTC"))
 
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
@@ -33,17 +40,20 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
         if static is not None:
             return static
         with session_factory() as session:
-            service = TraectService(session)
+            service = TraectService(session, clock=clock, timezone=timezone)
             try:
                 input_stream = cast(Any, environ["wsgi.input"])
                 body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
                 payload = _load_payload(body)
-                result = _dispatch(service, method, path, payload)
+                result = dispatch(service, method, path, payload)
                 session.commit()
                 return _json_response(start_response, "200 OK", result)
             except ValidationError as exc:
                 session.rollback()
                 return _json_response(start_response, "400 Bad Request", {"error": str(exc)})
+            except ConflictError as exc:
+                session.rollback()
+                return _json_response(start_response, "409 Conflict", {"error": str(exc)})
             except NotFoundError as exc:
                 session.rollback()
                 return _json_response(start_response, "404 Not Found", {"error": str(exc)})
@@ -86,6 +96,13 @@ def _serve_root(
 def _serve_static(start_response: Callable[..., Any], method: str, path: str) -> list[bytes] | None:
     if method != "GET":
         return None
+    if path.startswith("/js/"):
+        static_root = (WEB_ROOT / "static" / "js").resolve()
+        candidate = (WEB_ROOT / "static" / path.removeprefix("/")).resolve()
+        if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix == ".js":
+            body = candidate.read_text(encoding="utf-8")
+            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", body)
+        return None
     mapping = {
         "/tokens.css": ("static/tokens.css", "text/css; charset=utf-8"),
         "/typography.css": ("static/typography.css", "text/css; charset=utf-8"),
@@ -101,115 +118,6 @@ def _serve_static(start_response: Callable[..., Any], method: str, path: str) ->
     relative_path, content_type = mapping[path]
     body = (WEB_ROOT / relative_path).read_text(encoding="utf-8")
     return _respond(start_response, "200 OK", content_type, body)
-
-
-def _dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any]) -> Any:
-    parts = [part for part in path.split("/") if part]
-    if method == "POST" and parts == ["workspaces"]:
-        domains = [item["name"] for item in payload.get("domains", [])]
-        if domains:
-            return _workspace(service.create_workspace_with_domains(payload["name"], domains))
-        return _workspace(service.create_workspace(payload["name"]))
-    if method == "GET" and parts == ["workspaces", "current"]:
-        return _workspace(service.get_current_workspace())
-    if method == "GET" and len(parts) == 2 and parts[0] == "workspaces":
-        return _workspace(service.get_workspace(int(parts[1])))
-    if method == "POST" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
-        domain = service.create_domain(int(parts[1]), payload["name"])
-        return _domain(domain)
-    if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
-        domains = service.list_domains(int(parts[1]))
-        return {"items": [_domain(domain) for domain in domains]}
-    if (
-        method == "PUT"
-        and len(parts) == 4
-        and parts[0] == "workspaces"
-        and parts[2] == "domains"
-        and parts[3] == "order"
-    ):
-        domains = service.reorder_domains(int(parts[1]), [int(domain_id) for domain_id in payload["domain_ids"]])
-        return {"items": [_domain(domain) for domain in domains]}
-    if method == "PATCH" and len(parts) == 2 and parts[0] == "domains":
-        domain = service.update_domain(int(parts[1]), name=payload.get("name"), sort_order=payload.get("sort_order"))
-        return _domain(domain)
-    if method == "POST" and len(parts) == 3 and parts[0] == "domains" and parts[2] == "archive":
-        return _domain(service.archive_domain(int(parts[1])))
-    if method == "POST" and len(parts) == 3 and parts[0] == "domains" and parts[2] == "restore":
-        return _domain(service.restore_domain(int(parts[1])))
-    if method == "PUT" and len(parts) == 5 and parts[0] == "workspaces" and parts[2] == "weeks":
-        states = [
-            WeekStateInput(
-                domain_id=item["domain_id"],
-                condition=DomainCondition(item["condition"]),
-                attention=DomainAttention(item["attention"]),
-                comment=item.get("comment"),
-            )
-            for item in payload.get("states", [])
-        ]
-        week = service.upsert_week(
-            int(parts[1]),
-            int(parts[3]),
-            int(parts[4]),
-            focus_domain_id=payload.get("focus_domain_id"),
-            sacrificed_domain_id=payload.get("sacrificed_domain_id"),
-            sacrifice_reason=payload.get("sacrifice_reason"),
-            notes=payload.get("notes"),
-            states=states or None,
-        )
-        return _week(week)
-    if (
-        method == "GET"
-        and len(parts) == 4
-        and parts[0] == "workspaces"
-        and parts[2] == "weeks"
-        and parts[3] == "current"
-    ):
-        return _week(service.get_current_week(int(parts[1])))
-    if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "weeks":
-        weeks = service.list_weeks(int(parts[1]))
-        return {"items": [_week(week) for week in weeks]}
-    raise NotFoundError("route not found")
-
-
-def _workspace(workspace: Any) -> dict[str, Any]:
-    return {"id": workspace.id, "name": workspace.name}
-
-
-def _domain(domain: Any) -> dict[str, Any]:
-    return {
-        "id": domain.id,
-        "workspace_id": domain.workspace_id,
-        "name": domain.name,
-        "sort_order": domain.sort_order,
-        "archived_at": domain.archived_at,
-    }
-
-
-def _week(week: Any) -> dict[str, Any]:
-    return {
-        "id": week.id,
-        "workspace_id": week.workspace_id,
-        "iso_year": week.iso_year,
-        "iso_week": week.iso_week,
-        "starts_on": week.starts_on,
-        "ends_on": week.ends_on,
-        "focus_domain_id": week.focus_domain_id,
-        "focus_domain_name": week.focus_domain_name,
-        "sacrificed_domain_id": week.sacrificed_domain_id,
-        "sacrificed_domain_name": week.sacrificed_domain_name,
-        "sacrifice_reason": week.sacrifice_reason,
-        "notes": week.notes,
-        "states": [
-            {
-                "domain_id": state.domain_id,
-                "domain_name": state.domain_name,
-                "condition": state.condition,
-                "attention": state.attention,
-                "comment": state.comment,
-            }
-            for state in week.domain_states
-        ],
-    }
 
 
 def _json_default(value: Any) -> Any:

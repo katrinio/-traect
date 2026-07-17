@@ -62,6 +62,17 @@ section {
   gap: var(--space-5);
 }
 
+.current-week-meta {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.lifecycle-meta,
+.timeline-week-lifecycle {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 .timeline,
 .timeline-entries,
 .timeline-groups {
@@ -86,7 +97,7 @@ section {
 
 .timeline-week-summary {
   display: grid;
-  grid-template-columns: 1rem minmax(8rem, auto) minmax(0, 1fr);
+  grid-template-columns: 1rem minmax(8rem, auto) auto minmax(0, 1fr);
   gap: var(--space-3);
   align-items: baseline;
   cursor: pointer;
@@ -179,6 +190,10 @@ section {
 }
 
 .timeline-retry {
+  justify-self: start;
+}
+
+.timeline-edit-review {
   justify-self: start;
 }
 
@@ -353,6 +368,10 @@ section {
   }
 
   .timeline-week-compact-tradeoff {
+    grid-column: 2;
+  }
+
+  .timeline-week-lifecycle {
     grid-column: 2;
   }
 

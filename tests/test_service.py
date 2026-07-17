@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator
-from io import BytesIO
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from alembic import command
@@ -11,11 +12,13 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from tests.support import MutableClock, week_clock
+from tests.support import wsgi_request as _request
 from traect.api.app import build_app
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
-from traect.app.errors import ValidationError
+from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
-from traect.domain.enums import DomainAttention, DomainCondition
+from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import WeekDomainState
 
 
@@ -232,7 +235,8 @@ def test_week_rejects_trade_off_reason_without_what_gave_way(session: Session) -
 
 
 def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session: Session) -> None:
-    service = TraectService(session)
+    clock = MutableClock(week_clock(2026, 28))
+    service = TraectService(session, clock=clock)
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
@@ -254,6 +258,7 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
         health.id,
     }
 
+    clock.value = week_clock(2026, 29)
     next_week = service.upsert_week(
         workspace.id,
         2026,
@@ -264,7 +269,7 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
 
 
 def test_historical_states_remain_available_after_archival(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 28))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -343,6 +348,17 @@ def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) ->
     assert "Domains" in response["body"]
     assert "Workspace Setup / Domains" not in response["body"]
     assert "Workspace setup" not in response["body"]
+
+
+def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+
+    module = _request(app, "GET", "/js/api.js")
+    traversal = _request(app, "GET", "/js/../app.js")
+
+    assert module["status"].startswith("200")
+    assert "text/javascript" in module["headers"]
+    assert traversal["status"].startswith("404")
 
 
 def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:
@@ -615,10 +631,12 @@ def test_legacy_week_state_fields_are_not_accepted(tmp_path: Path) -> None:
 
 
 def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Session) -> None:
-    service = TraectService(session)
+    clock = MutableClock(week_clock(2025, 1))
+    service = TraectService(session, clock=clock)
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     for iso_year, iso_week in [(2025, week) for week in range(1, 53)] + [(2026, 1)]:
+        clock.value = week_clock(iso_year, iso_week)
         service.upsert_week(
             workspace.id,
             iso_year,
@@ -634,7 +652,8 @@ def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Sessi
 
 
 def test_history_api_preserves_saved_domain_names_and_membership(tmp_path: Path) -> None:
-    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    clock = MutableClock(week_clock(2026, 28))
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}", clock=clock)
     _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"},{"name":"Health"}]}')
     saved = _request(
         app,
@@ -647,6 +666,7 @@ def test_history_api_preserves_saved_domain_names_and_membership(tmp_path: Path)
         ),
     )
     assert saved["status"].startswith("200")
+    clock.value = week_clock(2026, 29)
     _request(app, "PATCH", "/domains/1", body=b'{"name":"Career"}')
     _request(app, "POST", "/domains/2/archive")
     _request(app, "POST", "/workspaces/1/domains", body=b'{"name":"Rest"}')
@@ -672,27 +692,115 @@ def test_viewing_empty_history_does_not_create_a_review(tmp_path: Path) -> None:
     assert second == {"items": []}
 
 
-def _request(
-    app: Callable[[dict[str, object], Callable[..., object]], list[bytes]],
-    method: str,
-    path: str,
-    *,
-    body: bytes = b"",
-) -> dict[str, str]:
-    status_line = ""
-    headers: list[tuple[str, str]] = []
+def test_current_previous_and_future_week_lifecycle(session: Session) -> None:
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
 
-    def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
-        nonlocal status_line, headers
-        status_line = status
-        headers = response_headers
+    assert service.lifecycle_for_week(2026, 29) == ReviewLifecycle.PROVISIONAL
+    assert service.lifecycle_for_week(2026, 28) == ReviewLifecycle.FINAL
+    with pytest.raises(ValidationError, match="future week"):
+        service.lifecycle_for_week(2026, 30)
 
-    environ = {
-        "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "QUERY_STRING": "",
-        "CONTENT_LENGTH": str(len(body)),
-        "wsgi.input": BytesIO(body),
+
+def test_provisional_review_updates_idempotently_then_becomes_final(session: Session) -> None:
+    clock = MutableClock(week_clock(2026, 29))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    states = [WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)]
+
+    first = service.upsert_week(workspace.id, 2026, 29, notes="First", states=states)
+    second = service.upsert_week(workspace.id, 2026, 29, notes="Updated", states=states)
+
+    assert first.id == second.id
+    assert second.notes == "Updated"
+    assert service.review_lifecycle(second) == ReviewLifecycle.PROVISIONAL
+    with pytest.raises(ValidationError, match="future week"):
+        service.upsert_week(workspace.id, 2026, 30, states=states)
+
+    clock.value = week_clock(2026, 30)
+    assert service.review_lifecycle(second) == ReviewLifecycle.FINAL
+    with pytest.raises(ConflictError, match="final and can no longer be edited"):
+        service.upsert_week(workspace.id, 2026, 29, notes="Too late", states=states)
+    assert second.notes == "Updated"
+
+
+def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path: Path) -> None:
+    clock = MutableClock(week_clock(2026, 29))
+    app = build_app(f"sqlite:///{tmp_path / 'lifecycle.db'}", clock=clock)
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+
+    empty_context = json.loads(_request(app, "GET", "/workspaces/1/weeks/current-context")["body"])
+    assert empty_context == {
+        "iso_year": 2026,
+        "iso_week": 29,
+        "lifecycle": "provisional",
+        "editable": True,
+        "review": None,
     }
-    response_body = b"".join(app(environ, start_response)).decode()
-    return {"status": status_line, "body": response_body, "headers": str(headers)}
+    assert json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"]) == {"items": []}
+
+    created = _request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/29",
+        body=(b'{"lifecycle":"final","states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}'),
+    )
+    provisional = json.loads(created["body"])
+    assert provisional["lifecycle"] == "provisional"
+    assert provisional["editable"] is True
+
+    clock.value = week_clock(2026, 30)
+    history = json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"])["items"]
+    assert len(history) == 1
+    assert history[0]["lifecycle"] == "final"
+    assert history[0]["editable"] is False
+    rejected = _request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/29",
+        body=b'{"states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}',
+    )
+    assert rejected["status"].startswith("409")
+    assert "final and can no longer be edited" in rejected["body"]
+
+    next_context = json.loads(_request(app, "GET", "/workspaces/1/weeks/current-context")["body"])
+    assert next_context["review"] is None
+    assert len(json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"])["items"]) == 1
+
+
+def test_iso_year_and_week_53_boundaries(session: Session) -> None:
+    new_year_service = TraectService(session, clock=lambda: datetime(2025, 12, 29, 12, tzinfo=UTC))
+    assert new_year_service.current_iso_week() == (2026, 1)
+    assert new_year_service.lifecycle_for_week(2025, 52) == ReviewLifecycle.FINAL
+    assert new_year_service.lifecycle_for_week(2026, 1) == ReviewLifecycle.PROVISIONAL
+
+    after_week_53 = TraectService(session, clock=lambda: datetime(2021, 1, 4, 12, tzinfo=UTC))
+    assert after_week_53.current_iso_week() == (2021, 1)
+    assert after_week_53.lifecycle_for_week(2020, 53) == ReviewLifecycle.FINAL
+
+
+def test_timezone_controls_sunday_monday_week_boundary(session: Session) -> None:
+    boundary = datetime(2026, 7, 12, 23, 30, tzinfo=UTC)
+
+    utc_service = TraectService(session, clock=lambda: boundary)
+    belgrade_service = TraectService(session, clock=lambda: boundary, timezone=ZoneInfo("Europe/Belgrade"))
+
+    assert utc_service.current_iso_week() == (2026, 28)
+    assert belgrade_service.current_iso_week() == (2026, 29)
+
+
+def test_viewing_lifecycle_does_not_mutate_review(session: Session) -> None:
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
+    )
+    original_updated_at = week.updated_at
+
+    assert service.review_lifecycle(service.get_current_week(workspace.id)) == ReviewLifecycle.PROVISIONAL
+    assert len(service.list_weeks(workspace.id)) == 1
+    assert week.updated_at == original_updated_at

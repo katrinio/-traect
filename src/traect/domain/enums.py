@@ -13,3 +13,8 @@ class DomainAttention(StrEnum):
     PRIMARY_FOCUS = "primary_focus"
     MAINTAINED = "maintained"
     PAUSED = "paused"
+
+
+class ReviewLifecycle(StrEnum):
+    PROVISIONAL = "provisional"
+    FINAL = "final"
