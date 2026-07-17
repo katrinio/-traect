@@ -337,6 +337,128 @@ section {
   justify-self: start;
 }
 
+.history-tabs {
+  display: flex;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+#focus-history-panel,
+.condition-history,
+.condition-history-content,
+.condition-distribution,
+.condition-coverage,
+.condition-sequence,
+.condition-transitions,
+.condition-runs,
+.condition-observations,
+.condition-history-empty {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.condition-history-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.condition-domain-select {
+  min-width: 13rem;
+}
+
+.condition-domain-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.condition-domain-status,
+.condition-week-lifecycle {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.condition-latest {
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.condition-latest p {
+  margin: 0;
+}
+
+.condition-summary {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.condition-summary > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.condition-summary dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.condition-coverage {
+  overflow-wrap: anywhere;
+}
+
+.condition-sequence ol {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.condition-week {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(9rem, 1fr) auto;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.condition-week > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.condition-week-absent,
+.condition-week-excluded {
+  color: var(--text-muted);
+}
+
+.condition-transitions ul,
+.condition-runs ul,
+.condition-observations ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.condition-history-integrity {
+  min-height: 0;
+}
+
+.condition-history-retry {
+  justify-self: start;
+}
+
 .current-tradeoff {
   display: grid;
   gap: var(--space-2);
@@ -566,6 +688,24 @@ section {
 
   .focus-domain-recent {
     grid-column: 1;
+  }
+
+  .condition-history-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .condition-domain-select {
+    min-width: 0;
+  }
+
+  .condition-domain-select select {
+    max-width: 100%;
+  }
+
+  .condition-week {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
   }
 
   .actions,

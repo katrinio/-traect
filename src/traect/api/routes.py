@@ -9,6 +9,7 @@ from traect.api.serializers import (
     week_response,
     workspace_response,
 )
+from traect.app.condition_history import ConditionHistoryService
 from traect.app.errors import NotFoundError, ValidationError
 from traect.app.focus_history import FocusHistoryService, parse_focus_history_range
 from traect.app.service import UNSET, TraectService, WeekStateInput
@@ -82,6 +83,23 @@ def dispatch(
             int(parts[1]),
             current_iso_week=service.current_iso_week(),
             reviewed_weeks=reviewed_weeks,
+        )
+    if method == "GET" and len(parts) == 4 and parts[0] == "workspaces" and parts[2:] == ["history", "condition"]:
+        range_values = query.get("reviewed_weeks", [])
+        domain_values = query.get("domain_id", [])
+        if len(range_values) > 1 or len(domain_values) > 1:
+            raise ValidationError("history query parameters must be provided once")
+        reviewed_weeks = parse_focus_history_range(range_values[0] if range_values else None)
+        try:
+            domain_id = int(domain_values[0]) if domain_values else None
+        except ValueError as exc:
+            raise ValidationError("domain_id must be an integer") from exc
+        service.get_workspace(int(parts[1]))
+        return ConditionHistoryService(service.session).aggregate(
+            int(parts[1]),
+            current_iso_week=service.current_iso_week(),
+            reviewed_weeks=reviewed_weeks,
+            domain_id=domain_id,
         )
     if method == "PUT" and len(parts) == 5 and parts[0] == "workspaces" and parts[2] == "weeks":
         return _upsert_week(service, parts, payload)

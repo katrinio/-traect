@@ -50,6 +50,14 @@ Focus history не имеет отдельной таблицы и не хран
 
 Недели без focus входят в reviewed-week denominator. Duplicate Week, duplicate Domain state, неизвестный attention и несколько Primary focus исключаются и возвращаются как integrity metadata. Историческая группировка использует Domain ID; архивность берётся из текущей Domain metadata, а имя — из самого свежего focus snapshot. Отсутствующая Domain reference сохраняет событие под стабильным ID и нейтральным именем `Unavailable Domain`.
 
+## Condition history
+
+Condition history использует ту же функцию range parsing и ту же трёхзапросную загрузку `week`, `week_domain_state` и `domain`, но агрегирует каждый Domain отдельно по `WeekDomainState.condition`. Отдельных history-таблиц и кэшированных counters нет, поэтому persisted correction сразу меняет результат.
+
+Для выбранного Domain каждая валидная review-неделя получает machine-readable presence: `recorded`, `absent` или `excluded`. Condition shares делятся на число валидных `recorded` states; coverage делится на число reviews и отдельно показывает snapshots с отсутствующим Domain. Duplicate Week исключается из reviewed range, conflicting duplicate state и неизвестный Condition остаются в sequence как `excluded` с кодом центрального weekly audit.
+
+Историческое имя берётся из самого свежего валидного Domain-state snapshot в диапазоне. Архивность берётся из текущей Domain metadata. Состояние с отсутствующей Domain reference остаётся доступным под исходным ID и fallback-именем `Unavailable Domain`.
+
 ## Аудит legacy weekly data
 
 On-demand аудит читает сырые табличные значения, поэтому способен сообщить о неизвестных enum и повреждённых ссылках, которые ORM не может безопасно загрузить. Safe repairs отделены от обнаружения и разрешаются только флагом `--fix-safe`; каждая Week ремонтируется в своей транзакции и повторно проверяется перед commit.

@@ -698,6 +698,164 @@ def test_focus_history_integrity_notice_uses_backend_metadata(page: Page, live_a
 
 
 @pytest.mark.browser
+def test_condition_history_empty_state_and_domain_selector_stay_in_timeline(page: Page, live_app: LiveApp) -> None:
+    seed_workspace(live_app, ["Work", "Health"])
+
+    page.goto(live_app)
+    expect(page.get_by_role("heading", name="Condition history")).not_to_be_visible()
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+
+    expect(page.get_by_role("heading", name="Condition history")).to_be_visible()
+    domain_select = page.locator("#condition-history-domain")
+    expect(domain_select).to_have_value("1")
+    expect(domain_select.locator("option")).to_have_text(["Work", "Health"])
+    expect(page.get_by_text("No Condition history yet.", exact=True)).to_be_visible()
+    expect(page.get_by_role("tab", name="Condition")).to_have_attribute("aria-selected", "true")
+    expect(page.get_by_role("tab", name="Focus")).to_have_attribute("aria-selected", "false")
+
+
+@pytest.mark.browser
+def test_condition_history_renders_distribution_gaps_changes_and_archived_domain(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Health", "Work"])
+    save_week_review(live_app, workspace_id, domains, 2026, 25, conditions={"Health": "stable"})
+    save_week_review(live_app, workspace_id, domains, 2026, 26, conditions={"Health": "at_risk"})
+    request_json(live_app, "POST", f"/domains/{domains['Health']}/archive")
+    save_week_review(live_app, workspace_id, {"Work": domains["Work"]}, 2026, 27)
+    request_json(live_app, "POST", f"/domains/{domains['Health']}/restore")
+    save_week_review(live_app, workspace_id, domains, 2026, 28, conditions={"Health": "critical"})
+    request_json(live_app, "POST", f"/domains/{domains['Health']}/archive")
+    save_current_review(live_app, workspace_id, {"Work": domains["Work"]})
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+    panel = page.locator("#condition-history-panel")
+    panel.get_by_label("Domain").select_option(str(domains["Health"]))
+
+    expect(panel.get_by_text("Archived", exact=True)).to_be_visible()
+    expect(panel.get_by_text("Critical · Week 28, 2026", exact=False)).to_be_visible()
+    expect(panel.get_by_text("Present in 3 of 5 reviewed weeks", exact=False)).to_be_visible()
+    expect(panel.locator(".condition-summary dd")).to_have_text(["3", "1 · 33%", "1 · 33%", "1 · 33%"])
+    weeks = panel.locator(".condition-week")
+    expect(weeks).to_have_count(5)
+    expect(weeks.nth(2)).to_contain_text("Week 27, 2026")
+    expect(weeks.nth(2)).to_contain_text("Absent from snapshot")
+    expect(weeks.nth(4)).to_contain_text("Provisional")
+    expect(panel.get_by_text("Changed from Stable to At risk between Weeks 25 and 26.", exact=True)).to_be_visible()
+    expect(panel.get_by_text("Changed from At risk to Critical", exact=False)).to_have_count(0)
+
+    week_28 = panel.get_by_role("link", name="Open saved review for Week 28, 2026")
+    target = week_28.get_attribute("href")
+    assert target is not None
+    week_28.click()
+    expect(page.locator(target)).to_have_attribute("open", "")
+
+    copy = panel.inner_text().lower()
+    for forbidden in ["caused", "because", "improved", "worsened", "should", "recovery"]:
+        assert forbidden not in copy
+
+
+@pytest.mark.browser
+def test_condition_history_range_is_shared_with_focus_history(page: Page, live_app: LiveApp) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    for iso_week in range(16, 29):
+        save_week_review(live_app, workspace_id, domains, 2026, iso_week, conditions={"Work": "stable"})
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+    panel = page.locator("#condition-history-panel")
+    expect(panel.get_by_text("Present in 12 of 12 reviewed weeks", exact=False)).to_be_visible()
+
+    page.get_by_label("Range").select_option("26")
+    expect(panel.get_by_text("Present in 13 of 13 reviewed weeks", exact=False)).to_be_visible()
+    page.get_by_role("tab", name="Focus").click()
+    expect(page.locator(".focus-history-summary dd")).to_have_text(["13", "0", "13"])
+    expect(page.get_by_label("Range")).to_have_value("26")
+
+
+@pytest.mark.browser
+def test_condition_history_excluded_state_is_explicit(page: Page, live_app: LiveApp) -> None:
+    seed_workspace(live_app, ["Work"])
+    page.route(
+        "**/history/condition?*",
+        lambda route: route.fulfill(
+            json={
+                "range": {"type": "reviewed_weeks", "value": 12},
+                "domains": [
+                    {
+                        "domain_id": 1,
+                        "name": "Work",
+                        "archived": False,
+                        "unavailable": False,
+                        "recorded_state_count": 0,
+                        "latest_record": None,
+                    }
+                ],
+                "integrity": {"excluded_week_count": 0, "excluded_reasons": {}},
+                "history": {
+                    "domain": {
+                        "domain_id": 1,
+                        "name": "Work",
+                        "archived": False,
+                        "unavailable": False,
+                        "recorded_state_count": 0,
+                        "latest_record": None,
+                    },
+                    "summary": {
+                        "reviewed_week_count": 1,
+                        "recorded_state_count": 0,
+                        "present_state_count": 1,
+                        "absent_state_count": 0,
+                        "excluded_state_count": 1,
+                        "coverage_share": 1.0,
+                        "latest_record": None,
+                        "counts": {"stable": 0, "at_risk": 0, "critical": 0},
+                        "shares": {"stable": 0.0, "at_risk": 0.0, "critical": 0.0},
+                    },
+                    "weeks": [
+                        {
+                            "week_id": 1,
+                            "iso_year": 2026,
+                            "iso_week": 28,
+                            "lifecycle": "final",
+                            "presence": "excluded",
+                            "condition": None,
+                            "excluded_reason": "invalid_condition",
+                        }
+                    ],
+                    "transitions": [],
+                    "runs": [],
+                    "observations": [
+                        {"code": "condition_excluded", "text": "1 Condition record could not be interpreted safely."}
+                    ],
+                    "excluded_reasons": {"invalid_condition": 1},
+                },
+            }
+        ),
+    )
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+
+    expect(
+        page.get_by_text("1 Condition record was excluded because historical data is inconsistent.", exact=True)
+    ).to_be_visible()
+    expect(page.locator(".condition-week-excluded")).to_contain_text("Excluded historical state")
+    expect(
+        page.get_by_text(
+            "Condition history for this Domain cannot be summarized until its historical data is reviewed.",
+            exact=True,
+        )
+    ).to_be_visible()
+
+
+@pytest.mark.browser
 def test_current_uses_backend_week_context_instead_of_browser_date(page: Page, live_app: LiveApp) -> None:
     workspace_id, _ = seed_workspace(live_app, ["Work"])
     page.route(

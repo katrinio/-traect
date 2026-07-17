@@ -61,6 +61,7 @@ Backend предоставляет небольшой набор HTTP-эндпо
 - `GET /workspaces/{workspace_id}/weeks/current-context`
 - `GET /workspaces/{workspace_id}/weeks`
 - `GET /workspaces/{workspace_id}/history/focus?reviewed_weeks=12|26|52|all`
+- `GET /workspaces/{workspace_id}/history/condition?domain_id={domain_id}&reviewed_weeks=12|26|52|all`
 
 ## Поток экранов
 
@@ -104,6 +105,12 @@ Timeline — это хронологический операционный жу
 Знаменатель процентов — все валидные сохранённые reviews выбранного диапазона. Review без Primary focus остаётся в знаменателе и отдельно отражается в `Without Primary focus`; поэтому суммы долей Domain могут быть меньше 100%. Сохранённый provisional review текущей недели включается, несохранённое состояние формы — нет. Архивный Domain остаётся в истории, группировка выполняется по стабильному Domain ID, а показываемое имя берётся из самого свежего focus snapshot в диапазоне.
 
 Неоднозначные duplicate Week или несколько `primary_focus` в одной неделе исключаются из агрегации и показываются нейтральным integrity-уведомлением. Счётчики не сохраняются: результат каждый раз вычисляется из `WeekDomainState.attention == primary_focus`, поэтому persisted historical correction виден сразу. Равномерное распределение не считается целью; история не выставляет score, не объясняет причины и не рекомендует следующий focus.
+
+Та же историческая панель содержит вкладку `Condition history`. Она показывает выбранный Domain и категориальную последовательность сохранённых `WeekDomainState.condition`: `Stable`, `At risk` и `Critical`. Range control общий с Focus history, Domain выбирается по стабильному ID; активные Domain идут в текущем порядке, а архивные с сохранёнными состояниями остаются доступными.
+
+Condition distribution использует только валидные записанные состояния Domain как знаменатель. Coverage показывается отдельно: `recorded` означает один читаемый state, `absent` — review существует, но Domain отсутствует в snapshot, `excluded` — относящийся к Domain state нельзя безопасно интерпретировать. Отсутствие и исключение не превращаются в Condition. Пустой calendar week не добавляется в sequence.
+
+Transitions и consecutive records связывают только соседние календарные reviews с валидным состоянием выбранного Domain. Отсутствующий review, `absent` или `excluded` разрывает непрерывность. Это описание записанных категорий: приложение не выводит причины, не рассчитывает health score, не сравнивает Condition с minimum acceptable level и не рекомендует будущий focus.
 
 ## Lifecycle weekly review
 
