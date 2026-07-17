@@ -496,7 +496,7 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
     try:
         with verification_engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0006_canonical_focus_source"
+                "0007_historical_week_corrections"
             )
     finally:
         verification_engine.dispose()
