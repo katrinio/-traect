@@ -96,6 +96,7 @@ function renderEmptyTimeline(onCurrent) {
 function renderTimelineWeek(review, index, onEdit) {
   const details = document.createElement("details");
   details.className = "timeline-week";
+  details.id = `timeline-week-${review.id}`;
   details.open = index < 3;
 
   const summary = document.createElement("summary");

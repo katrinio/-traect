@@ -33,10 +33,11 @@ def wsgi_request(
         status_line = status
         headers = response_headers
 
+    path_info, _, query_string = path.partition("?")
     environ = {
         "REQUEST_METHOD": method,
-        "PATH_INFO": path,
-        "QUERY_STRING": "",
+        "PATH_INFO": path_info,
+        "QUERY_STRING": query_string,
         "CONTENT_LENGTH": str(len(body)),
         "wsgi.input": BytesIO(body),
     }

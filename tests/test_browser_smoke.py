@@ -556,7 +556,7 @@ def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: P
     page.get_by_role("button", name="Timeline").click()
 
     timeline = page.locator("#timeline-view")
-    expect(timeline.get_by_text(long_name, exact=True)).to_have_count(2)
+    expect(timeline.locator(".timeline-entries").get_by_text(long_name, exact=True)).to_have_count(2)
     expect(timeline.locator("[data-tradeoff-field='reason'] dd")).to_have_text(long_reason)
     expect(timeline.get_by_text("Some saved data could not be shown:", exact=False)).to_be_visible()
     assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
@@ -575,6 +575,126 @@ def test_timeline_failed_request_is_actionable(page: Page, live_app: LiveApp) ->
 
     expect(page.get_by_text("Timeline could not be loaded. Try again.", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Retry")).to_be_visible()
+
+
+@pytest.mark.browser
+def test_focus_history_empty_state_stays_out_of_current(page: Page, live_app: LiveApp) -> None:
+    seed_workspace(live_app, ["Work", "Health"])
+
+    page.goto(live_app)
+    expect(page.get_by_role("heading", name="Focus history")).not_to_be_visible()
+    page.get_by_role("button", name="Timeline").click()
+
+    expect(page.get_by_role("heading", name="Focus history")).to_be_visible()
+    expect(page.get_by_text("No focus history yet.", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text("Primary focus will appear here after weekly reviews are saved.", exact=True)
+    ).to_be_visible()
+
+
+@pytest.mark.browser
+def test_focus_history_renders_distribution_details_sequence_and_archived_domain(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Health", "Home"])
+    save_week_review(live_app, workspace_id, domains, 2026, 23, focus="Work")
+    save_week_review(live_app, workspace_id, domains, 2026, 25, focus="Health")
+    save_week_review(live_app, workspace_id, domains, 2026, 27, focus="Work")
+    save_week_review(live_app, workspace_id, domains, 2026, 29)
+    request_json(live_app, "POST", f"/domains/{domains['Work']}/archive")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    history = page.locator(".focus-history")
+    summary = history.locator(".focus-history-summary")
+
+    expect(summary.locator("dd")).to_have_text(["4", "3", "1"])
+    expect(history.get_by_text("Percentages use all reviewed weeks", exact=False)).to_be_visible()
+    work = history.locator(".focus-domain-history", has_text="Work")
+    health = history.locator(".focus-domain-history", has_text="Health")
+    expect(work.get_by_text("Archived", exact=True)).to_be_visible()
+    expect(work.get_by_text("2 of 4 reviewed weeks · 50%", exact=True)).to_be_visible()
+    expect(health.get_by_text("1 of 4 reviewed weeks · 25%", exact=True)).to_be_visible()
+    expect(work.locator(".focus-domain-bar")).to_have_attribute(
+        "aria-label",
+        "Work: 2 of 4 reviewed weeks, 50%",
+    )
+    expect(work.locator(".focus-domain-bar-fill")).to_have_attribute("style", "width: 50%;")
+    expect(history.get_by_text("No Primary focus in this period", exact=True)).to_be_visible()
+    expect(history.get_by_text("Home", exact=True)).to_be_visible()
+
+    work.locator("summary").click()
+    expect(work.get_by_text("Week 27, 2026", exact=True)).to_be_visible()
+    expect(work.get_by_text("Week 23, 2026", exact=True)).to_be_visible()
+    expect(work.get_by_text("Week 25, 2026", exact=True)).to_have_count(0)
+
+    sequence = history.locator(".focus-history-sequence")
+    current_link = sequence.get_by_role("link", name="Open saved review for Week 29, 2026")
+    expect(current_link).to_contain_text("No Primary focus · Provisional")
+    current_target = current_link.get_attribute("href")
+    assert current_target is not None
+    current_link.click()
+    expect(page.locator(current_target)).to_have_attribute("open", "")
+    assert "dominated" not in history.inner_text().lower()
+    assert "neglected" not in history.inner_text().lower()
+    assert "should" not in history.inner_text().lower()
+
+
+@pytest.mark.browser
+def test_focus_history_range_uses_reviewed_weeks_and_updates_the_summary(page: Page, live_app: LiveApp) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    for iso_week in range(16, 29):
+        save_week_review(live_app, workspace_id, domains, 2026, iso_week, focus="Work")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    history = page.locator(".focus-history")
+    summary_values = history.locator(".focus-history-summary dd")
+    expect(summary_values).to_have_text(["12", "12", "0"])
+
+    history.get_by_label("Range").select_option("26")
+    expect(summary_values).to_have_text(["13", "13", "0"])
+    expect(history.get_by_label("Range")).to_have_value("26")
+
+
+@pytest.mark.browser
+def test_focus_history_integrity_notice_uses_backend_metadata(page: Page, live_app: LiveApp) -> None:
+    seed_workspace(live_app, ["Work"])
+    page.route(
+        "**/history/focus?*",
+        lambda route: route.fulfill(
+            json={
+                "range": {"type": "reviewed_weeks", "value": 12},
+                "summary": {
+                    "reviewed_week_count": 1,
+                    "focused_week_count": 0,
+                    "no_focus_week_count": 1,
+                    "excluded_week_count": 1,
+                },
+                "excluded_reasons": {"multiple_primary_focus": 1},
+                "domains": [],
+                "zero_focus_domains": [{"domain_id": 1, "name": "Work"}],
+                "weeks": [
+                    {
+                        "week_id": 1,
+                        "iso_year": 2026,
+                        "iso_week": 28,
+                        "lifecycle": "final",
+                        "focus": None,
+                    }
+                ],
+            }
+        ),
+    )
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    expect(
+        page.get_by_text("1 saved week was excluded because focus data is inconsistent.", exact=True)
+    ).to_be_visible()
+    expect(page.get_by_text("No reviewed week in this period has a Primary focus.", exact=True)).to_be_visible()
 
 
 @pytest.mark.browser
