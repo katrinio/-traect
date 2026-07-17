@@ -132,6 +132,14 @@ Paused sequence — последовательность соседних кал
 
 Текущая provisional-неделя входит в историю только после сохранения. Архивирование Domain не создаёт границу и не стирает последовательности. Длина и даты последовательности — нейтральное описание attention history, а не признак neglect, оценка допустимости паузы или рекомендация вернуть Domain в активное состояние.
 
+### Trade-off patterns описывают совместную запись, а не причинность
+
+Валидная пара строится только из канонического `WeekDomainState.attention == primary_focus` и явно сохранённого `Week.sacrificed_domain_id`. Порядок пары значим: `Work → Social` означает «Work был Primary focus, Social был выбран как What gave way» в одном review и не означает, что Work объективно вызвал изменение Social.
+
+Неделя с focus без `What gave way` остаётся видимой и входит в focus-centric denominator. Неоднозначный focus, sacrifice без focus, self-pair, отсутствующий sacrifice state и duplicate Week не угадываются и не искажают ranking. Архивность не удаляет участника истории, а historical correction пересчитывает агрегацию из persisted snapshot.
+
+Повторная co-occurrence не является оценкой правильности trade-off, доказательством вреда или прогнозом. Приложение не анализирует `Why`, не выводит impact score и не рекомендует будущие решения.
+
 ### Цена фокуса
 
 `What gave way` фиксирует область, которая получила меньше внимания из-за основного фокуса.
