@@ -13,7 +13,7 @@ from sqlalchemy import select
 from traect.app.database import make_engine, make_session_factory, migrate_schema
 from traect.app.errors import NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
-from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.domain.enums import DomainAttention, DomainCondition
 from traect.domain.models import Workspace
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
@@ -140,8 +140,8 @@ def _dispatch(service: TraectService, method: str, path: str, payload: dict[str,
         states = [
             WeekStateInput(
                 domain_id=item["domain_id"],
-                status=WeekDomainStatus(item["status"]),
-                mode=WeekDomainMode(item["mode"]),
+                condition=DomainCondition(item["condition"]),
+                attention=DomainAttention(item["attention"]),
                 comment=item.get("comment"),
             )
             for item in payload.get("states", [])
@@ -203,8 +203,8 @@ def _week(week: Any) -> dict[str, Any]:
             {
                 "domain_id": state.domain_id,
                 "domain_name": state.domain_name,
-                "status": state.status,
-                "mode": state.mode,
+                "condition": state.condition,
+                "attention": state.attention,
                 "comment": state.comment,
             }
             for state in week.domain_states

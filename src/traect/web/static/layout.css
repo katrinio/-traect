@@ -167,7 +167,7 @@ section {
 }
 
 .attention-mark,
-.timeline-domain-row .status-mark {
+.timeline-domain-row .condition-mark {
   display: inline-flex;
   justify-content: center;
 }

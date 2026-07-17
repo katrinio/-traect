@@ -3,13 +3,13 @@ from __future__ import annotations
 from enum import StrEnum
 
 
-class WeekDomainStatus(StrEnum):
-    GOOD = "good"
-    WARNING = "warning"
+class DomainCondition(StrEnum):
+    STABLE = "stable"
+    AT_RISK = "at_risk"
     CRITICAL = "critical"
 
 
-class WeekDomainMode(StrEnum):
-    FOCUS = "focus"
-    MAINTAIN = "maintain"
-    IGNORE = "ignore"
+class DomainAttention(StrEnum):
+    PRIMARY_FOCUS = "primary_focus"
+    MAINTAINED = "maintained"
+    PAUSED = "paused"

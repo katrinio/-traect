@@ -40,16 +40,16 @@ const el = {
   backToCurrentButton: document.getElementById("back-to-current"),
 };
 
-const modePresentation = {
-  focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },
-  maintain: { symbol: "✓", label: "Maintained", group: "Maintained" },
-  ignore: { symbol: "○", label: "Paused", group: "Paused" },
+const attentionPresentation = {
+  primary_focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },
+  maintained: { symbol: "✓", label: "Maintained", group: "Maintained" },
+  paused: { symbol: "○", label: "Paused", group: "Paused" },
 };
 
-const statusLabels = {
-  good: ["✓", "Stable"],
-  warning: ["⚠", "At Risk"],
-  critical: ["!", "Critical"],
+const conditionPresentation = {
+  stable: { symbol: "✓", label: "Stable" },
+  at_risk: { symbol: "⚠", label: "At risk" },
+  critical: { symbol: "!", label: "Critical" },
 };
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -236,20 +236,20 @@ function renderCurrent() {
   renderCurrentTradeOff(review);
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   const grouped = {
-    focus: [],
-    maintain: [],
-    ignore: [],
+    primary_focus: [],
+    maintained: [],
+    paused: [],
   };
 
   for (const domain of activeDomains()) {
-    const currentState = statesByDomainId.get(domain.id) || { mode: "ignore", status: "good" };
-    grouped[currentState.mode].push({ domain, state: currentState });
+    const currentState = statesByDomainId.get(domain.id) || { attention: "paused", condition: "stable" };
+    grouped[currentState.attention].push({ domain, state: currentState });
   }
 
   const groups = [
-    ["Focus", grouped.focus],
-    ["Maintenance", grouped.maintain],
-    ["Ignored", grouped.ignore],
+    [attentionPresentation.primary_focus.group, grouped.primary_focus],
+    [attentionPresentation.maintained.group, grouped.maintained],
+    [attentionPresentation.paused.group, grouped.paused],
   ].filter(([, entries]) => entries.length > 0);
 
   el.currentGroups.replaceChildren(...groups.map(([title, entries]) => renderGroup(title, entries)));
@@ -323,14 +323,14 @@ function renderGroup(title, entries) {
 }
 
 function renderCurrentRow(domain, currentState) {
-  const status = currentState.status || "good";
-  const [symbol, label] = statusLabels[status] || statusLabels.good;
+  const condition = currentState.condition || "stable";
+  const presentation = conditionPresentation[condition] || conditionPresentation.stable;
   const row = document.createElement("div");
   row.className = "current-row";
   row.innerHTML = `
     <span class="domain-name">${escapeHtml(domain.name)}</span>
-    <span class="status-mark" data-status="${status}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
-      <span class="status-symbol" aria-hidden="true">${symbol}</span>
+    <span class="condition-mark" data-condition="${condition}" title="${escapeHtml(presentation.label)}" aria-label="${escapeHtml(presentation.label)}">
+      <span class="condition-symbol" aria-hidden="true">${presentation.symbol}</span>
     </span>
   `;
   return row;
@@ -369,7 +369,7 @@ function mapTimelineHistory(payload) {
         issues.push("A Domain state has no historical name.");
         return [];
       }
-      if (!(item.mode in modePresentation) || !(item.status in statusLabels)) {
+      if (!(item.attention in attentionPresentation) || !(item.condition in conditionPresentation)) {
         issues.push(`The saved state for ${item.domain_name} is invalid.`);
         return [];
       }
@@ -463,9 +463,9 @@ function renderTimelineWeek(review, index) {
 
   const groups = document.createElement("div");
   groups.className = "timeline-groups";
-  for (const mode of ["focus", "maintain", "ignore"]) {
-    const entries = review.states.filter((item) => item.mode === mode);
-    if (entries.length) groups.appendChild(renderTimelineGroup(mode, entries));
+  for (const attention of ["primary_focus", "maintained", "paused"]) {
+    const entries = review.states.filter((item) => item.attention === attention);
+    if (entries.length) groups.appendChild(renderTimelineGroup(attention, entries));
   }
   content.appendChild(groups);
 
@@ -481,19 +481,19 @@ function renderTimelineWeek(review, index) {
 
 function timelineCompactTradeoff(review) {
   if (!review.focus_domain_id && !review.focus_domain_name) return "No primary focus";
-  const focus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
+  const mainFocus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
   const sacrificed = typeof review.sacrificed_domain_name === "string"
     ? review.sacrificed_domain_name
     : "None recorded";
-  return `Focus: ${focus} · Gave way: ${sacrificed}`;
+  return `Main focus: ${mainFocus} · Gave way: ${sacrificed}`;
 }
 
-function renderTimelineGroup(mode, entries) {
+function renderTimelineGroup(attention, entries) {
   const section = document.createElement("section");
   section.className = "timeline-group";
   const heading = document.createElement("h4");
   heading.className = "section-title";
-  heading.textContent = modePresentation[mode].group;
+  heading.textContent = attentionPresentation[attention].group;
   const rows = document.createElement("div");
   rows.className = "timeline-domain-rows";
   rows.replaceChildren(...entries.map(renderTimelineDomainRow));
@@ -502,19 +502,19 @@ function renderTimelineGroup(mode, entries) {
 }
 
 function renderTimelineDomainRow(item) {
-  const attention = modePresentation[item.mode];
-  const [conditionSymbol, conditionLabel] = statusLabels[item.status];
+  const attention = attentionPresentation[item.attention];
+  const condition = conditionPresentation[item.condition];
   const row = document.createElement("div");
   row.className = "timeline-domain-row";
-  row.dataset.mode = item.mode;
-  row.dataset.status = item.status;
+  row.dataset.attention = item.attention;
+  row.dataset.condition = item.condition;
   row.innerHTML = `
     <span class="attention-mark" title="${escapeHtml(attention.label)}" aria-label="Attention: ${escapeHtml(attention.label)}">
       <span aria-hidden="true">${attention.symbol}</span>
     </span>
     <span class="timeline-domain-name">${escapeHtml(item.domain_name)}</span>
-    <span class="status-mark" data-status="${item.status}" title="${escapeHtml(conditionLabel)}" aria-label="Condition: ${escapeHtml(conditionLabel)}">
-      <span class="status-symbol" aria-hidden="true">${conditionSymbol}</span>
+    <span class="condition-mark" data-condition="${item.condition}" title="${escapeHtml(condition.label)}" aria-label="Condition: ${escapeHtml(condition.label)}">
+      <span class="condition-symbol" aria-hidden="true">${condition.symbol}</span>
     </span>
   `;
   return row;
@@ -531,7 +531,9 @@ function renderEdit() {
   focusSelect.innerHTML = summaryOptions(active);
   sacrificedSelect.innerHTML = summaryOptions(active);
 
-  const focusedDomains = active.filter((domain) => statesByDomainId.get(domain.id)?.mode === "focus");
+  const focusedDomains = active.filter(
+    (domain) => statesByDomainId.get(domain.id)?.attention === "primary_focus",
+  );
   const savedFocusId = active.some((domain) => domain.id === review?.focus_domain_id) ? review.focus_domain_id : null;
   const selectedFocusId = savedFocusId || (focusedDomains.length === 1 ? focusedDomains[0].id : null);
   focusSelect.value = selectedFocusId ? String(selectedFocusId) : "";
@@ -559,15 +561,13 @@ function renderEditRow(domain, currentState) {
     </div>
     <div class="domain-grid">
       <label>Attention this week
-        <select name="mode_${domain.id}">
-          ${modeOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+        <select name="attention_${domain.id}">
+          ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <label>Condition now
-        <select name="status_${domain.id}">
-          <option value="good">✓ Stable</option>
-          <option value="warning">⚠ At risk</option>
-          <option value="critical">! Critical</option>
+        <select name="condition_${domain.id}">
+          ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <details class="domain-context full" ${comment ? "open" : ""}>
@@ -580,19 +580,19 @@ function renderEditRow(domain, currentState) {
       </details>
     </div>
   `;
-  const modeSelect = row.querySelector(`select[name="mode_${domain.id}"]`);
+  const attentionSelect = row.querySelector(`select[name="attention_${domain.id}"]`);
   const commentInput = row.querySelector(`textarea[name="comment_${domain.id}"]`);
   const commentSummary = row.querySelector(".domain-context summary");
   const characterCount = row.querySelector(".character-count");
 
-  modeSelect.value = currentState?.mode || "ignore";
-  row.querySelector(`select[name="status_${domain.id}"]`).value = currentState?.status || "good";
+  attentionSelect.value = currentState?.attention || "paused";
+  row.querySelector(`select[name="condition_${domain.id}"]`).value = currentState?.condition || "stable";
   commentInput.value = comment;
   updateCommentContext(commentInput, commentSummary, characterCount);
 
-  modeSelect.addEventListener("change", () => {
+  attentionSelect.addEventListener("change", () => {
     const focusSelect = document.querySelector("select[name='focus_domain_id']");
-    if (modeSelect.value === "focus") {
+    if (attentionSelect.value === "primary_focus") {
       focusSelect.value = String(domain.id);
       synchronizeFocusControls(domain.id);
     } else if (focusSelect.value === String(domain.id)) {
@@ -605,12 +605,12 @@ function renderEditRow(domain, currentState) {
 }
 
 function synchronizeFocusControls(focusDomainId) {
-  document.querySelectorAll("select[name^='mode_']").forEach((select) => {
-    const domainId = Number(select.name.replace("mode_", ""));
+  document.querySelectorAll("select[name^='attention_']").forEach((select) => {
+    const domainId = Number(select.name.replace("attention_", ""));
     if (domainId === focusDomainId) {
-      select.value = "focus";
-    } else if (select.value === "focus") {
-      select.value = "maintain";
+      select.value = "primary_focus";
+    } else if (select.value === "primary_focus") {
+      select.value = "maintained";
     }
   });
   const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
@@ -757,8 +757,8 @@ async function saveReview() {
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
     states: active.map((domain) => ({
       domain_id: domain.id,
-      mode: document.querySelector(`select[name="mode_${domain.id}"]`).value,
-      status: document.querySelector(`select[name="status_${domain.id}"]`).value,
+      attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
+      condition: document.querySelector(`select[name="condition_${domain.id}"]`).value,
       comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
     })),
   };
@@ -807,8 +807,12 @@ function summaryOptions(active) {
   return options.join("");
 }
 
-function modeOptions() {
-  return Object.entries(modePresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
+function attentionOptions() {
+  return Object.entries(attentionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
+}
+
+function conditionOptions() {
+  return Object.entries(conditionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
 }
 
 function selectedNumber(name) {
