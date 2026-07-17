@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from traect.app.history import load_history_rows, parse_reviewed_week_range
-from traect.app.weekly_audit import WeeklyIssueCode
+from traect.app.issue_codes import WeeklyIssueCode
 
 parse_focus_history_range = parse_reviewed_week_range
 

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
 from traect.app.history import load_history_rows
-from traect.app.weekly_audit import WeeklyIssueCode
+from traect.app.issue_codes import WeeklyIssueCode
 
 VALID_ATTENTIONS = {"primary_focus", "maintained", "paused"}
 

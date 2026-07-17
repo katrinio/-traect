@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
 from traect.app.history import load_history_rows
+from traect.app.issue_codes import WeeklyIssueCode
 from traect.app.paused_streaks import calculate_paused_streaks
-from traect.app.weekly_audit import WeeklyIssueCode
 
 CONDITION_LABELS = {"stable": "Stable", "at_risk": "At risk", "critical": "Critical"}
 
