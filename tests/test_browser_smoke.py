@@ -323,6 +323,12 @@ def test_timeline_orders_weeks_and_renders_tradeoff_variants(page: Page, live_ap
     expect(weeks.nth(1).locator("[data-tradeoff-field='sacrifice'] dd")).to_have_text("Health")
     expect(weeks.nth(1).locator("[data-tradeoff-field='reason']")).to_have_count(0)
     expect(weeks.nth(2).locator("[data-tradeoff-field='sacrifice'] dd")).to_have_text("None recorded")
+    expect(weeks.nth(0)).to_have_attribute("open", "")
+    expect(weeks.nth(1)).to_have_attribute("open", "")
+    expect(weeks.nth(2)).to_have_attribute("open", "")
+    expect(weeks.nth(3)).not_to_have_attribute("open", "")
+    expect(weeks.nth(3).locator(".timeline-week-compact-tradeoff")).to_have_text("No primary focus")
+    weeks.nth(3).locator(".timeline-week-summary").press("Enter")
     expect(weeks.nth(3).get_by_text("No primary focus recorded.", exact=True)).to_be_visible()
     expect(weeks.nth(3).locator(".tradeoff-row")).to_have_count(0)
 

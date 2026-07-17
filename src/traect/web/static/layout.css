@@ -77,17 +77,58 @@ section {
 }
 
 .timeline-week {
-  display: grid;
-  gap: var(--space-3);
+  display: block;
 }
 
 .timeline-week + .timeline-week {
   padding-top: var(--space-2);
 }
 
-.timeline-week-heading {
-  padding-bottom: var(--space-2);
+.timeline-week-summary {
+  display: grid;
+  grid-template-columns: 1rem minmax(8rem, auto) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+  cursor: pointer;
+  padding: var(--space-2) 0;
+  list-style: none;
   border-bottom: 1px solid var(--border);
+}
+
+.timeline-week-summary::-webkit-details-marker {
+  display: none;
+}
+
+.timeline-week-summary::before {
+  content: "›";
+  color: var(--text-muted);
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.timeline-week[open] .timeline-week-summary::before {
+  transform: rotate(90deg);
+}
+
+.timeline-week-heading {
+  font-weight: 600;
+}
+
+.timeline-week-compact-tradeoff {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.timeline-week-details {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.timeline-week:not([open]) .timeline-week-summary {
+  padding-bottom: var(--space-2);
 }
 
 .timeline-tradeoff {
@@ -304,6 +345,15 @@ section {
   .tradeoff-row {
     grid-template-columns: 1fr;
     gap: 0;
+  }
+
+  .timeline-week-summary {
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+
+  .timeline-week-compact-tradeoff {
+    grid-column: 2;
   }
 
   .actions,

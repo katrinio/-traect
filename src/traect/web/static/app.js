@@ -431,15 +431,27 @@ function renderTimeline() {
   el.timelineEntries.replaceChildren(...state.timeline.items.map(renderTimelineWeek));
 }
 
-function renderTimelineWeek(review) {
-  const article = document.createElement("article");
-  article.className = "timeline-week";
-  const heading = document.createElement("h3");
+function renderTimelineWeek(review, index) {
+  const details = document.createElement("details");
+  details.className = "timeline-week";
+  details.open = index < 3;
+
+  const summary = document.createElement("summary");
+  summary.className = "timeline-week-summary";
+  const heading = document.createElement("span");
   heading.className = "timeline-week-heading";
+  heading.setAttribute("role", "heading");
+  heading.setAttribute("aria-level", "3");
   heading.textContent = Number.isInteger(review.iso_year) && Number.isInteger(review.iso_week)
     ? `Week ${review.iso_week}, ${review.iso_year}`
     : "Unknown week";
-  article.appendChild(heading);
+  const compactTradeoff = document.createElement("span");
+  compactTradeoff.className = "timeline-week-compact-tradeoff";
+  compactTradeoff.textContent = timelineCompactTradeoff(review);
+  summary.append(heading, compactTradeoff);
+
+  const content = document.createElement("div");
+  content.className = "timeline-week-details";
 
   const tradeoff = document.createElement("div");
   tradeoff.className = "timeline-tradeoff";
@@ -447,7 +459,7 @@ function renderTimelineWeek(review) {
     focusName: typeof review.focus_domain_name === "string" ? review.focus_domain_name : null,
     sacrificedName: typeof review.sacrificed_domain_name === "string" ? review.sacrificed_domain_name : null,
   }));
-  article.appendChild(tradeoff);
+  content.appendChild(tradeoff);
 
   const groups = document.createElement("div");
   groups.className = "timeline-groups";
@@ -455,15 +467,25 @@ function renderTimelineWeek(review) {
     const entries = review.states.filter((item) => item.mode === mode);
     if (entries.length) groups.appendChild(renderTimelineGroup(mode, entries));
   }
-  article.appendChild(groups);
+  content.appendChild(groups);
 
   if (review.issues.length) {
     const integrity = document.createElement("p");
     integrity.className = "status error timeline-integrity";
     integrity.textContent = `Some saved data could not be shown: ${[...new Set(review.issues)].join(" ")}`;
-    article.appendChild(integrity);
+    content.appendChild(integrity);
   }
-  return article;
+  details.append(summary, content);
+  return details;
+}
+
+function timelineCompactTradeoff(review) {
+  if (!review.focus_domain_id && !review.focus_domain_name) return "No primary focus";
+  const focus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
+  const sacrificed = typeof review.sacrificed_domain_name === "string"
+    ? review.sacrificed_domain_name
+    : "None recorded";
+  return `Focus: ${focus} · Gave way: ${sacrificed}`;
 }
 
 function renderTimelineGroup(mode, entries) {
