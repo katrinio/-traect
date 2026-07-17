@@ -51,14 +51,14 @@
             <h2 class="view-title" id="timeline-title">Timeline</h2>
             <p class="hint">Saved weekly snapshots in reverse chronological order.</p>
           </div>
-          <section class="focus-history" aria-labelledby="focus-history-title">
+          <section class="focus-history history-panel" aria-labelledby="history-title">
             <div class="focus-history-heading">
               <div>
-                <h3 class="section-title" id="focus-history-title">Focus history</h3>
-                <p class="hint">Where Primary focus was recorded across saved weekly reviews.</p>
+                <h3 class="section-title" id="history-title">History</h3>
+                <p class="hint">Recorded Focus and Condition across saved weekly reviews.</p>
               </div>
               <label class="focus-history-range">Range
-                <select id="focus-history-range" aria-controls="focus-history-content">
+                <select id="focus-history-range" aria-controls="focus-history-content condition-history-content">
                   <option value="12">Last 12 reviewed weeks</option>
                   <option value="26">Last 26 reviewed weeks</option>
                   <option value="52">Last 52 reviewed weeks</option>
@@ -66,8 +66,34 @@
                 </select>
               </label>
             </div>
-            <div class="status" id="focus-history-status" role="status"></div>
-            <div class="focus-history-content" id="focus-history-content"></div>
+            <div class="history-tabs" role="tablist" aria-label="History type">
+              <button class="tab" id="history-focus-tab" type="button" role="tab"
+                aria-selected="true" aria-controls="focus-history-panel">Focus</button>
+              <button class="tab" id="history-condition-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="condition-history-panel">Condition</button>
+            </div>
+            <section id="focus-history-panel" role="tabpanel" aria-labelledby="history-focus-tab">
+              <div>
+                <h4 class="section-title" id="focus-history-title">Focus history</h4>
+                <p class="hint">Where Primary focus was recorded across saved weekly reviews.</p>
+              </div>
+              <div class="status" id="focus-history-status" role="status"></div>
+              <div class="focus-history-content" id="focus-history-content"></div>
+            </section>
+            <section id="condition-history-panel" class="condition-history hidden" role="tabpanel"
+              aria-labelledby="history-condition-tab">
+              <div class="condition-history-heading">
+                <div>
+                  <h4 class="section-title">Condition history</h4>
+                  <p class="hint">How a Domain’s recorded Condition appears across saved reviews.</p>
+                </div>
+                <label class="condition-domain-select">Domain
+                  <select id="condition-history-domain"></select>
+                </label>
+              </div>
+              <div class="status" id="condition-history-status" role="status"></div>
+              <div class="condition-history-content" id="condition-history-content"></div>
+            </section>
           </section>
           <h3 class="section-title">Weekly snapshots</h3>
           <div class="status" id="timeline-status" role="status"></div>

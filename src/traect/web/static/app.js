@@ -1,4 +1,5 @@
 import { fetchJSON } from "/js/api.js";
+import { mapConditionHistory, renderConditionHistory } from "/js/condition-history.js";
 import { renderCurrent } from "/js/current.js";
 import { renderDomainManagement } from "/js/domains.js";
 import { mapFocusHistory, renderFocusHistory } from "/js/focus-history.js";
@@ -21,6 +22,8 @@ const state = {
   currentReview: null,
   timeline: { items: null, loading: false, error: null },
   focusHistory: { data: null, loading: false, error: null, range: "12" },
+  conditionHistory: { data: null, loading: false, error: null, domainId: null },
+  historyView: "focus",
   activeView: "current",
   setupDraft: [{ name: "" }],
 };
@@ -43,6 +46,13 @@ const el = {
   focusHistoryContent: document.getElementById("focus-history-content"),
   focusHistoryStatus: document.getElementById("focus-history-status"),
   focusHistoryRange: document.getElementById("focus-history-range"),
+  historyFocusTab: document.getElementById("history-focus-tab"),
+  historyConditionTab: document.getElementById("history-condition-tab"),
+  focusHistoryPanel: document.getElementById("focus-history-panel"),
+  conditionHistoryPanel: document.getElementById("condition-history-panel"),
+  conditionHistoryContent: document.getElementById("condition-history-content"),
+  conditionHistoryStatus: document.getElementById("condition-history-status"),
+  conditionHistoryDomain: document.getElementById("condition-history-domain"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
   archivedDomains: document.getElementById("archived-domains"),
@@ -81,7 +91,16 @@ document.getElementById("add-active-domain")?.addEventListener("click", async ()
 
 el.focusHistoryRange?.addEventListener("change", () => {
   state.focusHistory.range = el.focusHistoryRange.value;
-  loadFocusHistory();
+  state.focusHistory.data = null;
+  state.conditionHistory.data = null;
+  loadActiveHistory();
+});
+
+el.historyFocusTab?.addEventListener("click", () => setHistoryView("focus"));
+el.historyConditionTab?.addEventListener("click", () => setHistoryView("condition"));
+el.conditionHistoryDomain?.addEventListener("change", () => {
+  state.conditionHistory.domainId = Number(el.conditionHistoryDomain.value);
+  loadConditionHistory();
 });
 
 el.editReviewButton?.addEventListener("click", () => setActiveView("edit"));
@@ -179,8 +198,20 @@ function setActiveView(view) {
   render();
   if (view === "timeline") {
     if (state.timeline.items === null && !state.timeline.loading) loadTimeline();
-    if (state.focusHistory.data === null && !state.focusHistory.loading) loadFocusHistory();
+    loadActiveHistory();
   }
+}
+
+function setHistoryView(view) {
+  state.historyView = view;
+  renderTimelineView();
+  loadActiveHistory();
+}
+
+function loadActiveHistory() {
+  if (state.historyView === "focus") {
+    if (state.focusHistory.data === null && !state.focusHistory.loading) loadFocusHistory();
+  } else if (state.conditionHistory.data === null && !state.conditionHistory.loading) loadConditionHistory();
 }
 
 function renderSetupView() {
@@ -204,6 +235,7 @@ function moveSetupDomain(index, offset) {
 }
 
 function renderTimelineView() {
+  renderHistoryTabs();
   renderTimeline(
     { entries: el.timelineEntries, status: el.timelineStatus },
     state.timeline,
@@ -218,6 +250,23 @@ function renderTimelineView() {
     state.focusHistory,
     { onRetry: loadFocusHistory },
   );
+  renderConditionHistory(
+    {
+      content: el.conditionHistoryContent,
+      status: el.conditionHistoryStatus,
+      domain: el.conditionHistoryDomain,
+    },
+    state.conditionHistory,
+    { onRetry: loadConditionHistory },
+  );
+}
+
+function renderHistoryTabs() {
+  const focusSelected = state.historyView === "focus";
+  el.historyFocusTab?.setAttribute("aria-selected", String(focusSelected));
+  el.historyConditionTab?.setAttribute("aria-selected", String(!focusSelected));
+  el.focusHistoryPanel?.classList.toggle("hidden", !focusSelected);
+  el.conditionHistoryPanel?.classList.toggle("hidden", focusSelected);
 }
 
 async function loadFocusHistory() {
@@ -232,6 +281,28 @@ async function loadFocusHistory() {
     state.focusHistory.error = error.message || "Focus history could not be loaded.";
   } finally {
     state.focusHistory.loading = false;
+    renderTimelineView();
+  }
+}
+
+async function loadConditionHistory() {
+  state.conditionHistory.loading = true;
+  state.conditionHistory.error = null;
+  renderTimelineView();
+  try {
+    const range = encodeURIComponent(state.focusHistory.range);
+    const domain = state.conditionHistory.domainId === null
+      ? ""
+      : `&domain_id=${encodeURIComponent(state.conditionHistory.domainId)}`;
+    const payload = await fetchJSON(
+      `/workspaces/${state.workspace.id}/history/condition?reviewed_weeks=${range}${domain}`,
+    );
+    state.conditionHistory.data = mapConditionHistory(payload);
+    state.conditionHistory.domainId = payload.history?.domain.domain_id ?? null;
+  } catch (error) {
+    state.conditionHistory.error = error.message || "Condition history could not be loaded.";
+  } finally {
+    state.conditionHistory.loading = false;
     renderTimelineView();
   }
 }
@@ -292,6 +363,7 @@ async function saveReview() {
   await loadState();
   state.timeline = { items: null, loading: false, error: null };
   state.focusHistory = { ...state.focusHistory, data: null, error: null };
+  state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
   state.activeView = "current";
   render();
 }
@@ -340,5 +412,6 @@ async function createDomainFromManage() {
 async function refresh() {
   await loadState();
   state.focusHistory = { ...state.focusHistory, data: null, error: null };
+  state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
   render();
 }
