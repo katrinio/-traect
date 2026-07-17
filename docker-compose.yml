@@ -8,10 +8,10 @@ services:
     environment:
       TRAECT_HOST: 0.0.0.0
       TRAECT_PORT: 8000
-      TRAECT_DATABASE_URL: sqlite:////app/data/traect.db
+      TRAECT_DATABASE_URL: sqlite:////data/traect.db
       TRAECT_TIMEZONE: Europe/Belgrade
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     healthcheck:
       test:
         - CMD

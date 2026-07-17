@@ -67,7 +67,7 @@ Backend предоставляет небольшой набор HTTP-эндпо
 
 ## Docker deployment
 
-Сервер читает `TRAECT_HOST` (по умолчанию `127.0.0.1`) и `TRAECT_PORT` (по умолчанию `8000`). Production compose передаёт `0.0.0.0:8000` внутри контейнера, но публикует сервис только на `127.0.0.1:8012` для reverse proxy. SQLite-файл хранится в bind-mounted `./data` как `/app/data/traect.db`; production timezone — `Europe/Belgrade`.
+Сервер читает `TRAECT_HOST` (по умолчанию `127.0.0.1`) и `TRAECT_PORT` (по умолчанию `8000`). Production compose передаёт `0.0.0.0:8000` внутри контейнера, но публикует сервис только на `127.0.0.1:8012` для reverse proxy. SQLite-файл хранится в bind-mounted `./data` как `/data/traect.db`; production timezone — `Europe/Belgrade`.
 
 ## Поток экранов
 

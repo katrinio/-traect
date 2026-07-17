@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app/src \
     TRAECT_HOST=0.0.0.0 \
     TRAECT_PORT=8000 \
-    TRAECT_DATABASE_URL=sqlite:////app/data/traect.db
+    TRAECT_DATABASE_URL=sqlite:////data/traect.db
 
 WORKDIR /app
 
@@ -25,8 +25,8 @@ COPY migrations ./migrations
 
 RUN poetry install --only main \
     && useradd --create-home --uid 10001 traect \
-    && mkdir /app/data \
-    && chown traect:traect /app/data
+    && mkdir /data \
+    && chown traect:traect /data
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
 RUN chmod 755 /usr/local/bin/docker-entrypoint
