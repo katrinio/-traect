@@ -538,6 +538,41 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
         verification_engine.dispose()
 
 
+def test_squashed_migration_creates_the_current_schema(tmp_path: Path) -> None:
+    database = tmp_path / "fresh.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    migrate_schema(engine)
+
+    with engine.connect() as connection:
+        tables = set(inspect(connection).get_table_names())
+        domain_columns = {column["name"] for column in inspect(connection).get_columns("domain")}
+        week_columns = {column["name"] for column in inspect(connection).get_columns("week")}
+        state_columns = {column["name"] for column in inspect(connection).get_columns("week_domain_state")}
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+
+    assert {"workspace", "domain", "week", "week_domain_state"} <= tables
+    assert "minimum_acceptable_level" in domain_columns
+    assert "focus_domain_id" not in week_columns
+    assert {"attention", "condition", "minimum_acceptable_level_snapshot"} <= state_columns
+    assert revision == "0008_minimum_acceptable_level"
+
+
+def test_squashed_migration_rejects_a_database_on_the_previous_chain(tmp_path: Path) -> None:
+    database = tmp_path / "previous-chain.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES ('0007_historical_week_corrections')")
+        )
+
+    with pytest.raises(RuntimeError, match="predates the squashed baseline"):
+        migrate_schema(engine)
+    engine.dispose()
+
+
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_historical_name_migration_backfills_existing_reviews(tmp_path: Path) -> None:
     database = tmp_path / "existing.db"
     engine = create_engine(f"sqlite:///{database}", future=True)
@@ -641,6 +676,7 @@ def _focus_migration_database(
         (None, {1: "maintained", 2: "paused"}, [(1, "maintained"), (2, "paused")]),
     ],
 )
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_preserves_or_repairs_unambiguous_history(
     tmp_path: Path,
     focus_domain_id: int | None,
@@ -677,6 +713,7 @@ def test_focus_source_migration_preserves_or_repairs_unambiguous_history(
         ({1: "primary_focus", 2: "primary_focus"}, "multiple Primary focus states in weeks [1]"),
     ],
 )
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_reports_ambiguous_history(
     tmp_path: Path,
     attentions: dict[int, str],
@@ -697,6 +734,7 @@ def test_focus_source_migration_reports_ambiguous_history(
     assert {"focus_domain_id", "focus_domain_name"} <= week_columns
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_downgrade_derives_legacy_fields(tmp_path: Path) -> None:
     engine, config = _focus_migration_database(
         tmp_path,
@@ -713,6 +751,7 @@ def test_focus_source_migration_downgrade_derives_legacy_fields(tmp_path: Path) 
     assert restored == (1, "Work")
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_terminology_migration_preserves_history_and_supports_downgrade(tmp_path: Path) -> None:
     database = tmp_path / "terminology.db"
     engine = create_engine(f"sqlite:///{database}", future=True)
@@ -785,6 +824,7 @@ def test_terminology_migration_preserves_history_and_supports_downgrade(tmp_path
     ]
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_terminology_migration_rejects_unknown_values_before_changing_schema(tmp_path: Path) -> None:
     database = tmp_path / "unknown-terminology.db"
     engine = create_engine(f"sqlite:///{database}", future=True)

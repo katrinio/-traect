@@ -5,15 +5,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from tests.support import MutableClock, week_clock
 from tests.support import wsgi_request as request
 from traect.api.app import build_app
-from traect.app.database import MIGRATIONS_ROOT, create_schema
+from traect.app.database import create_schema
 from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import DomainAttention, DomainCondition
@@ -195,51 +193,3 @@ def test_current_review_context_uses_current_configuration_until_next_save(tmp_p
 
     assert saved["review_domains"][0]["minimum_acceptable_level"] == "Changed after the saved review."
     assert saved["review"]["states"][0]["minimum_acceptable_level"] == "Original context."
-
-
-def test_none_and_legacy_snapshot_values_remain_valid(tmp_path: Path) -> None:
-    database = tmp_path / "legacy-minimum.db"
-    engine = create_engine(f"sqlite:///{database}", future=True)
-    config = Config()
-    config.set_main_option("script_location", str(MIGRATIONS_ROOT))
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0007_historical_week_corrections")
-        connection.execute(text("INSERT INTO workspace (id, name) VALUES (1, 'Life')"))
-        connection.execute(text("INSERT INTO domain (id, workspace_id, name, sort_order) VALUES (1, 1, 'Work', 0)"))
-        connection.execute(
-            text(
-                "INSERT INTO week (id, workspace_id, iso_year, iso_week, starts_on, ends_on, revision) "
-                "VALUES (1, 1, 2026, 28, '2026-07-06', '2026-07-12', 1)"
-            )
-        )
-        connection.execute(
-            text(
-                "INSERT INTO week_domain_state "
-                "(id, week_id, domain_id, domain_name, attention, condition) "
-                "VALUES (1, 1, 1, 'Work', 'maintained', 'stable')"
-            )
-        )
-        command.upgrade(config, "head")
-
-    with engine.connect() as connection:
-        domain_level = connection.execute(text("SELECT minimum_acceptable_level FROM domain")).scalar_one()
-        state_level = connection.execute(
-            text("SELECT minimum_acceptable_level_snapshot FROM week_domain_state")
-        ).scalar_one()
-        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
-    assert domain_level is None
-    assert state_level is None
-    assert revision == "0008_minimum_acceptable_level"
-
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0007_historical_week_corrections")
-    with engine.connect() as connection:
-        domain_columns = {column["name"] for column in inspect(connection).get_columns("domain")}
-        assert "minimum_acceptable_level" not in domain_columns
-        assert "minimum_acceptable_level_snapshot" not in {
-            column["name"] for column in inspect(connection).get_columns("week_domain_state")
-        }
-        assert connection.execute(text("SELECT name FROM domain WHERE id = 1")).scalar_one() == "Work"
-    engine.dispose()
