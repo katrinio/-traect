@@ -349,6 +349,7 @@ section {
 .condition-distribution,
 .condition-coverage,
 .condition-sequence,
+.paused-sequences,
 .condition-transitions,
 .condition-runs,
 .condition-observations,
@@ -444,11 +445,44 @@ section {
 
 .condition-transitions ul,
 .condition-runs ul,
+.paused-sequence-list,
+.paused-sequence-item ul,
+.paused-sequence-observations,
 .condition-observations ul {
   display: grid;
   gap: var(--space-1);
   margin: 0;
   padding-left: var(--space-5);
+}
+
+.paused-sequence-summaries {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.paused-sequence-summaries > div,
+.paused-sequence-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+}
+
+.paused-sequence-summaries h5,
+.paused-sequence-summaries p,
+.paused-sequence-item > p {
+  margin: 0;
+}
+
+.paused-sequence-summaries p,
+.paused-sequence-item ul {
+  margin-top: var(--space-1);
+}
+
+.paused-sequence-list {
+  display: grid;
+  gap: var(--space-2);
 }
 
 .condition-history-integrity {
@@ -706,6 +740,10 @@ section {
   .condition-week {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-1);
+  }
+
+  .paused-sequence-summaries {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .actions,

@@ -7,6 +7,9 @@ export function mapConditionHistory(payload) {
   if (payload.history && (!payload.history.summary || !Array.isArray(payload.history.weeks))) {
     throw new Error("Condition history response is incomplete.");
   }
+  if (payload.history && (!payload.history.paused_sequences || !Array.isArray(payload.history.paused_sequences.streaks))) {
+    throw new Error("Condition history response is incomplete.");
+  }
   return payload;
 }
 
@@ -57,6 +60,7 @@ export function renderConditionHistory(elements, state, callbacks) {
       sections.push(renderDistribution(history.summary));
     }
     sections.push(renderSequence(history.weeks));
+    sections.push(renderPausedSequences(history.paused_sequences));
     if (history.transitions.length) sections.push(renderTransitions(history.transitions));
     if (history.runs.length) sections.push(renderRuns(history.runs));
     if (history.observations.length) sections.push(renderObservations(history.observations));
@@ -192,6 +196,100 @@ function renderSequence(weeks) {
   for (const week of weeks) list.appendChild(renderWeek(week));
   section.append(heading, explanation, list);
   return section;
+}
+
+function renderPausedSequences(sequences) {
+  const section = document.createElement("section");
+  section.className = "paused-sequences";
+  const heading = document.createElement("h4");
+  heading.className = "section-title";
+  heading.textContent = "Paused history";
+  section.appendChild(heading);
+  if (sequences.excluded_state_count > 0) {
+    section.appendChild(renderIntegrityNotice(sequences.excluded_state_count, "Attention record"));
+  }
+  if (!sequences.streaks.length) {
+    const empty = document.createElement("p");
+    empty.className = "condition-history-empty";
+    empty.textContent = "No paused sequences have been recorded.";
+    section.appendChild(empty);
+    return section;
+  }
+
+  const summaries = document.createElement("div");
+  summaries.className = "paused-sequence-summaries";
+  summaries.append(
+    renderPausedSummary(
+      "Current paused sequence",
+      sequences.current_streak.active
+        ? `${formatReviewedWeeks(sequences.current_streak.length)} · Started Week ${sequences.current_streak.started.iso_week}, ${sequences.current_streak.started.iso_year}`
+        : "No active paused sequence",
+    ),
+    renderPausedSummary(
+      "Longest paused sequence",
+      `${formatReviewedWeeks(sequences.longest_streak.length)} · ${formatWeekRange(sequences.longest_streak)}`,
+    ),
+  );
+  const list = document.createElement("ol");
+  list.className = "paused-sequence-list";
+  for (const streak of sequences.streaks) list.appendChild(renderPausedStreak(streak));
+  section.append(summaries, list);
+
+  if (sequences.observations.length) {
+    const observations = document.createElement("ul");
+    observations.className = "paused-sequence-observations";
+    for (const observation of sequences.observations) {
+      const item = document.createElement("li");
+      item.dataset.observationCode = observation.code;
+      item.textContent = observation.text;
+      observations.appendChild(item);
+    }
+    section.appendChild(observations);
+  }
+  return section;
+}
+
+function renderPausedSummary(label, value) {
+  const summary = document.createElement("div");
+  const heading = document.createElement("h5");
+  heading.textContent = label;
+  const text = document.createElement("p");
+  text.textContent = value;
+  summary.append(heading, text);
+  return summary;
+}
+
+function renderPausedStreak(streak) {
+  const item = document.createElement("li");
+  item.className = "paused-sequence-item";
+  const heading = document.createElement("p");
+  heading.textContent = `${formatWeekRange(streak)} · ${formatReviewedWeeks(streak.length)}${streak.active ? " · Current" : ""}`;
+  const weeks = document.createElement("ul");
+  for (const week of streak.weeks) {
+    const weekItem = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = `#timeline-week-${week.week_id}`;
+    link.setAttribute("aria-label", `Open paused sequence review for Week ${week.iso_week}, ${week.iso_year}`);
+    link.textContent = `Week ${week.iso_week}, ${week.iso_year} · Paused`;
+    link.addEventListener("click", () => {
+      const target = document.getElementById(`timeline-week-${week.week_id}`);
+      if (target instanceof HTMLDetailsElement) target.open = true;
+    });
+    weekItem.appendChild(link);
+    weeks.appendChild(weekItem);
+  }
+  item.append(heading, weeks);
+  return item;
+}
+
+function formatWeekRange(streak) {
+  const started = `Week ${streak.started.iso_week}, ${streak.started.iso_year}`;
+  const ended = `Week ${streak.ended.iso_week}, ${streak.ended.iso_year}`;
+  return started === ended ? started : `${started} → ${ended}`;
+}
+
+function formatReviewedWeeks(count) {
+  return `${count} consecutive reviewed ${count === 1 ? "week" : "weeks"}`;
 }
 
 function renderWeek(week) {

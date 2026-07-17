@@ -830,6 +830,14 @@ def test_condition_history_excluded_state_is_explicit(page: Page, live_app: Live
                     ],
                     "transitions": [],
                     "runs": [],
+                    "paused_sequences": {
+                        "current_streak": {"active": False, "length": 0, "started": None},
+                        "longest_streak": None,
+                        "streaks": [],
+                        "excluded_state_count": 0,
+                        "excluded_reasons": {},
+                        "observations": [],
+                    },
                     "observations": [
                         {"code": "condition_excluded", "text": "1 Condition record could not be interpreted safely."}
                     ],
@@ -853,6 +861,61 @@ def test_condition_history_excluded_state_is_explicit(page: Page, live_app: Live
             exact=True,
         )
     ).to_be_visible()
+
+
+@pytest.mark.browser
+def test_paused_history_renders_sequences_links_archival_and_observational_copy(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Learning"])
+    for iso_week in (25, 26, 27):
+        save_week_review(live_app, workspace_id, domains, 2026, iso_week, paused={"Learning"})
+    save_week_review(live_app, workspace_id, domains, 2026, 28)
+    save_current_review(live_app, workspace_id, domains, paused={"Learning"})
+    request_json(live_app, "POST", f"/domains/{domains['Learning']}/archive")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+    panel = page.locator("#condition-history-panel")
+
+    expect(panel.get_by_text("Archived", exact=True)).to_be_visible()
+    expect(panel.get_by_role("heading", name="Paused history")).to_be_visible()
+    expect(panel.get_by_text("1 consecutive reviewed week · Started Week 29, 2026", exact=True)).to_be_visible()
+    expect(
+        panel.get_by_text("3 consecutive reviewed weeks · Week 25, 2026 → Week 27, 2026", exact=True)
+    ).to_be_visible()
+    expect(panel.locator(".paused-sequence-item")).to_have_count(2)
+    week_link = panel.get_by_role("link", name="Open paused sequence review for Week 26, 2026")
+    expect(week_link).to_have_text("Week 26, 2026 · Paused")
+    week_link.click()
+    expect(page.locator("#timeline-week-2")).to_have_attribute("open", "")
+
+    copy = panel.locator(".paused-sequences").inner_text().lower()
+    for forbidden in ["neglect", "abandon", "dormant", "too long", "should", "reactivate"]:
+        assert forbidden not in copy
+
+    page.set_viewport_size({"width": 375, "height": 800})
+    assert panel.locator(".paused-sequence-summaries").evaluate(
+        "element => getComputedStyle(element).gridTemplateColumns.split(' ').length === 1"
+    )
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+@pytest.mark.browser
+def test_paused_history_has_calm_empty_state_when_attention_was_never_paused(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    save_current_review(live_app, workspace_id, domains)
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Condition").click()
+
+    expect(page.get_by_text("No paused sequences have been recorded.", exact=True)).to_be_visible()
 
 
 @pytest.mark.browser

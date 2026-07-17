@@ -41,6 +41,7 @@ Backend разделён по уровню ответственности:
 - `traect/app/focus_history.py` — read-only агрегация Primary focus по сохранённым weekly snapshots;
 - `traect/app/history.py` — общие ranges и bounded-загрузка persisted history;
 - `traect/app/condition_history.py` — Domain-first агрегация записанных Condition, gaps и transitions;
+- `traect/app/paused_streaks.py` — единый детерминированный расчёт Paused sequences из canonical Attention history;
 - `traect/app/weekly_audit.py` — read-only проверка legacy weekly data и централизованные safe repair-планы;
 - `traect/cli.py` — команды запуска сервера и операционной диагностики;
 - `traect/domain/` — ORM-модель и enums без HTTP-представления.

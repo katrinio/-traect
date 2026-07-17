@@ -37,7 +37,9 @@ def save_week(
     domain_conditions: dict[int, DomainCondition],
     iso_year: int,
     iso_week: int,
+    domain_attentions: dict[int, DomainAttention] | None = None,
 ) -> None:
+    domain_attentions = domain_attentions or {}
     current = clock.value
     clock.value = week_clock(iso_year, iso_week)
     try:
@@ -48,7 +50,7 @@ def save_week(
             states=[
                 WeekStateInput(
                     domain_id=domain_id,
-                    attention=DomainAttention.MAINTAINED,
+                    attention=domain_attentions.get(domain_id, DomainAttention.MAINTAINED),
                     condition=condition,
                 )
                 for domain_id, condition in domain_conditions.items()
@@ -301,11 +303,35 @@ def test_condition_history_api_shape_validation_and_no_score(tmp_path: Path) -> 
     assert payload["history"]["summary"]["shares"] == {"stable": 0.0, "at_risk": 1.0, "critical": 0.0}
     assert payload["history"]["weeks"][0]["presence"] == "recorded"
     assert payload["history"]["weeks"][0]["lifecycle"] == "provisional"
+    assert payload["history"]["paused_sequences"] == {
+        "current_streak": {"active": False, "length": 0, "started": None},
+        "longest_streak": None,
+        "streaks": [],
+        "excluded_state_count": 0,
+        "excluded_reasons": {},
+        "observations": [],
+    }
     assert {item["code"] for item in payload["history"]["observations"]} == {
         "condition_frequency",
         "latest_condition",
     }
     assert "score" not in json.dumps(payload).lower()
+
+    request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/29",
+        body=b'{"states":[{"domain_id":1,"attention":"paused","condition":"at_risk"}]}',
+    )
+    paused_payload = json.loads(
+        request(app, "GET", "/workspaces/1/history/condition?domain_id=1&reviewed_weeks=all")["body"]
+    )
+    assert paused_payload["history"]["paused_sequences"]["current_streak"] == {
+        "active": True,
+        "length": 1,
+        "started": {"week_id": 1, "iso_year": 2026, "iso_week": 29},
+    }
+    assert paused_payload["history"]["paused_sequences"]["longest_streak"]["length"] == 1
 
     missing = request(app, "GET", "/workspaces/1/history/condition?domain_id=999")
     invalid_domain = request(app, "GET", "/workspaces/1/history/condition?domain_id=health")
@@ -313,3 +339,244 @@ def test_condition_history_api_shape_validation_and_no_score(tmp_path: Path) -> 
     assert missing["status"].startswith("404")
     assert invalid_domain["status"].startswith("400")
     assert invalid_range["status"].startswith("400")
+
+
+def test_paused_sequences_current_longest_interruptions_and_iso_boundary(session: Session) -> None:
+    clock = MutableClock(week_clock(2026, 2))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    learning = service.create_domain(workspace.id, "Learning")
+    attention_by_period = [
+        (2025, 51, DomainAttention.PAUSED),
+        (2025, 52, DomainAttention.PAUSED),
+        (2026, 1, DomainAttention.MAINTAINED),
+        (2026, 2, DomainAttention.PAUSED),
+    ]
+    for iso_year, iso_week, attention in attention_by_period:
+        save_week(
+            service,
+            clock,
+            workspace.id,
+            {learning.id: DomainCondition.STABLE},
+            iso_year,
+            iso_week,
+            {learning.id: attention},
+        )
+
+    sequences = aggregate(service, workspace.id, learning.id, None)["history"]["paused_sequences"]
+
+    assert sequences["current_streak"] == {
+        "active": True,
+        "length": 1,
+        "started": {"week_id": 4, "iso_year": 2026, "iso_week": 2},
+    }
+    assert sequences["longest_streak"]["length"] == 2
+    assert [(item["length"], item["active"]) for item in sequences["streaks"]] == [(2, False), (1, True)]
+    assert [week["iso_week"] for week in sequences["streaks"][0]["weeks"]] == [51, 52]
+
+
+@pytest.mark.parametrize("interrupting_attention", [DomainAttention.MAINTAINED, DomainAttention.PRIMARY_FOCUS])
+def test_non_paused_attention_interrupts_sequence(
+    session: Session,
+    interrupting_attention: DomainAttention,
+) -> None:
+    payload = ConditionHistoryService._aggregate_rows(
+        week_rows=[
+            {"id": 3, "iso_year": 2026, "iso_week": 3},
+            {"id": 2, "iso_year": 2026, "iso_week": 2},
+            {"id": 1, "iso_year": 2026, "iso_week": 1},
+        ],
+        state_rows=[
+            {
+                "id": period,
+                "week_id": period,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": attention,
+            }
+            for period, attention in [(1, "paused"), (2, interrupting_attention.value), (3, "paused")]
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": None}],
+        current_iso_week=(2026, 3),
+        reviewed_weeks=None,
+        domain_id=1,
+    )
+
+    assert [streak["length"] for streak in payload["history"]["paused_sequences"]["streaks"]] == [1, 1]
+
+
+def test_missing_review_absent_state_and_excluded_state_break_paused_sequences() -> None:
+    payload = ConditionHistoryService._aggregate_rows(
+        week_rows=[
+            {"id": 6, "iso_year": 2026, "iso_week": 7},
+            {"id": 5, "iso_year": 2026, "iso_week": 6},
+            {"id": 4, "iso_year": 2026, "iso_week": 5},
+            {"id": 3, "iso_year": 2026, "iso_week": 4},
+            {"id": 2, "iso_year": 2026, "iso_week": 2},
+            {"id": 1, "iso_year": 2026, "iso_week": 1},
+        ],
+        state_rows=[
+            {
+                "id": 1,
+                "week_id": 1,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+            {
+                "id": 2,
+                "week_id": 2,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+            {
+                "id": 3,
+                "week_id": 4,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+            {
+                "id": 4,
+                "week_id": 5,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "unknown",
+            },
+            {
+                "id": 5,
+                "week_id": 6,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": "2026-01-01"}],
+        current_iso_week=(2026, 7),
+        reviewed_weeks=None,
+        domain_id=1,
+    )
+
+    history = payload["history"]
+    assert history["domain"]["archived"] is True
+    assert [week["attention_presence"] for week in history["weeks"]] == [
+        "recorded",
+        "recorded",
+        "absent",
+        "recorded",
+        "excluded",
+        "recorded",
+    ]
+    assert [streak["length"] for streak in history["paused_sequences"]["streaks"]] == [2, 1, 1]
+    assert history["paused_sequences"]["excluded_reasons"] == {"invalid_attention": 1}
+    assert history["paused_sequences"]["current_streak"]["active"] is True
+
+
+def test_paused_sequence_recomputes_after_historical_correction(session: Session) -> None:
+    clock = MutableClock(week_clock(2026, 2))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    for iso_week in (1, 2):
+        save_week(
+            service,
+            clock,
+            workspace.id,
+            {work.id: DomainCondition.STABLE},
+            2026,
+            iso_week,
+            {work.id: DomainAttention.PAUSED},
+        )
+    assert aggregate(service, workspace.id, work.id)["history"]["paused_sequences"]["current_streak"]["length"] == 2
+
+    service.session.execute(
+        text("UPDATE week_domain_state SET attention = 'maintained' WHERE week_id = 1 AND domain_id = :domain_id"),
+        {"domain_id": work.id},
+    )
+
+    sequences = aggregate(service, workspace.id, work.id)["history"]["paused_sequences"]
+    assert sequences["current_streak"]["length"] == 1
+    assert sequences["longest_streak"]["length"] == 1
+
+
+def test_missing_current_review_means_historical_pause_is_not_active() -> None:
+    payload = ConditionHistoryService._aggregate_rows(
+        week_rows=[{"id": 1, "iso_year": 2026, "iso_week": 3}],
+        state_rows=[
+            {
+                "id": 1,
+                "week_id": 1,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            }
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": None}],
+        current_iso_week=(2026, 4),
+        reviewed_weeks=None,
+        domain_id=1,
+    )
+
+    sequences = payload["history"]["paused_sequences"]
+    assert sequences["current_streak"] == {"active": False, "length": 0, "started": None}
+    assert sequences["streaks"][0]["active"] is False
+
+
+def test_conflicting_duplicate_attention_is_excluded_and_breaks_sequence() -> None:
+    payload = ConditionHistoryService._aggregate_rows(
+        week_rows=[
+            {"id": 3, "iso_year": 2026, "iso_week": 3},
+            {"id": 2, "iso_year": 2026, "iso_week": 2},
+            {"id": 1, "iso_year": 2026, "iso_week": 1},
+        ],
+        state_rows=[
+            {
+                "id": 1,
+                "week_id": 1,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+            {
+                "id": 2,
+                "week_id": 2,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+            {
+                "id": 3,
+                "week_id": 2,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "maintained",
+            },
+            {
+                "id": 4,
+                "week_id": 3,
+                "domain_id": 1,
+                "domain_name": "Work",
+                "condition": "stable",
+                "attention": "paused",
+            },
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": None}],
+        current_iso_week=(2026, 3),
+        reviewed_weeks=None,
+        domain_id=1,
+    )
+
+    sequences = payload["history"]["paused_sequences"]
+    assert [streak["length"] for streak in sequences["streaks"]] == [1, 1]
+    assert sequences["excluded_reasons"] == {"duplicate_domain_state": 1}

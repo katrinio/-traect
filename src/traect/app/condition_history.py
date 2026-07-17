@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
 from traect.app.history import load_history_rows
+from traect.app.paused_streaks import calculate_paused_streaks
 from traect.app.weekly_audit import WeeklyIssueCode
 
 CONDITION_LABELS = {"stable": "Stable", "at_risk": "At risk", "critical": "Critical"}
@@ -166,6 +167,26 @@ def _classify_states(states: Sequence[Any]) -> dict[str, Any]:
     return {"presence": "recorded", "condition": condition, "reason": None, "state": state}
 
 
+def _classify_attention_states(states: Sequence[Any]) -> dict[str, Any]:
+    if not states:
+        return {"presence": "absent", "attention": None, "reason": None}
+    attentions = {str(state.get("attention", "")) for state in states}
+    if len(states) > 1 and len(attentions) > 1:
+        return {
+            "presence": "excluded",
+            "attention": None,
+            "reason": WeeklyIssueCode.DUPLICATE_DOMAIN_STATE.value,
+        }
+    attention = str(states[0].get("attention", ""))
+    if attention not in {"primary_focus", "maintained", "paused"}:
+        return {
+            "presence": "excluded",
+            "attention": None,
+            "reason": WeeklyIssueCode.INVALID_ATTENTION.value,
+        }
+    return {"presence": "recorded", "attention": attention, "reason": None}
+
+
 def _domain_name(metadata: Mapping[str, Any] | None, state: Mapping[str, Any] | None) -> str:
     if metadata is None:
         return "Unavailable Domain"
@@ -205,7 +226,9 @@ def _build_domain_history(
     chronological_weeks = []
     excluded_state_reasons: Counter[str] = Counter()
     for week in reversed(selected_weeks):
-        classification = _classify_states(states_by_week_domain.get((int(week["id"]), domain_id), []))
+        states = states_by_week_domain.get((int(week["id"]), domain_id), [])
+        classification = _classify_states(states)
+        attention_classification = _classify_attention_states(states)
         iso_year = int(week["iso_year"])
         iso_week = int(week["iso_week"])
         entry = {
@@ -216,6 +239,9 @@ def _build_domain_history(
             "presence": classification["presence"],
             "condition": classification["condition"],
             "excluded_reason": classification["reason"],
+            "attention_presence": attention_classification["presence"],
+            "attention": attention_classification["attention"],
+            "attention_excluded_reason": attention_classification["reason"],
         }
         if classification["presence"] == "excluded":
             excluded_state_reasons[str(classification["reason"])] += 1
@@ -237,6 +263,8 @@ def _build_domain_history(
         None,
     )
     transitions, runs = _transitions_and_runs(chronological_weeks)
+    paused_sequences = calculate_paused_streaks(chronological_weeks, current_iso_week=current_iso_week)
+    paused_sequences["observations"] = _build_paused_observations(str(domain["name"]), paused_sequences)
     summary = {
         "reviewed_week_count": reviewed_week_count,
         "recorded_state_count": recorded_state_count,
@@ -254,6 +282,7 @@ def _build_domain_history(
         "weeks": chronological_weeks,
         "transitions": transitions,
         "runs": runs,
+        "paused_sequences": paused_sequences,
         "observations": _build_observations(str(domain["name"]), summary),
         "excluded_reasons": dict(sorted(excluded_state_reasons.items())),
     }
@@ -344,6 +373,33 @@ def _build_observations(name: str, summary: Mapping[str, Any]) -> list[dict[str,
             {
                 "code": "condition_excluded",
                 "text": f"{excluded} Condition record could not be interpreted safely.",
+            }
+        )
+    return observations
+
+
+def _build_paused_observations(name: str, sequences: Mapping[str, Any]) -> list[dict[str, str]]:
+    observations: list[dict[str, str]] = []
+    current = sequences["current_streak"]
+    if current["active"]:
+        observations.append(
+            {
+                "code": "current_paused_sequence",
+                "text": f"{name} has been Paused for {current['length']} consecutive reviewed weeks.",
+            }
+        )
+        observations.append(
+            {
+                "code": "paused_sequence_started",
+                "text": f"The current paused sequence began in Week {current['started']['iso_week']}.",
+            }
+        )
+    longest = sequences["longest_streak"]
+    if longest is not None:
+        observations.append(
+            {
+                "code": "longest_paused_sequence",
+                "text": f"The longest recorded paused sequence lasted {longest['length']} reviewed weeks.",
             }
         )
     return observations
