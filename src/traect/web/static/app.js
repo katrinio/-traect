@@ -13,16 +13,12 @@ const state = {
 
 const el = {
   headline: document.getElementById("headline"),
-  saveState: document.getElementById("save-state"),
   mainNav: document.getElementById("main-nav"),
   setupView: document.getElementById("setup-view"),
   currentView: document.getElementById("current-view"),
   editView: document.getElementById("edit-view"),
   manageView: document.getElementById("manage-view"),
   weekMeta: document.getElementById("week-meta"),
-  editWeekMeta: document.getElementById("edit-week-meta"),
-  domainCount: document.getElementById("domain-count"),
-  editDomainCount: document.getElementById("edit-domain-count"),
   currentGroups: document.getElementById("current-groups"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
@@ -30,7 +26,6 @@ const el = {
   setupDomains: document.getElementById("setup-domains"),
   setupForm: document.getElementById("setup-form"),
   reviewForm: document.getElementById("review-form"),
-  domainForm: document.getElementById("domain-form"),
   setupStatus: document.getElementById("setup-status"),
   reviewStatus: document.getElementById("review-status"),
   manageStatus: document.getElementById("manage-status"),
@@ -70,13 +65,6 @@ if (el.reviewForm) {
   });
 }
 
-if (el.domainForm) {
-  el.domainForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await withStatus(el.manageStatus, saveDomainOrder);
-  });
-}
-
 const addInitialDomainButton = document.getElementById("add-domain");
 if (addInitialDomainButton) {
   addInitialDomainButton.addEventListener("click", () => {
@@ -89,13 +77,6 @@ const addActiveDomainButton = document.getElementById("add-active-domain");
 if (addActiveDomainButton) {
   addActiveDomainButton.addEventListener("click", async () => {
     await withStatus(el.manageStatus, createDomainFromManage);
-  });
-}
-
-const saveOrderButton = document.getElementById("save-order");
-if (saveOrderButton) {
-  saveOrderButton.addEventListener("click", async () => {
-    await withStatus(el.manageStatus, saveDomainOrder);
   });
 }
 
@@ -141,18 +122,21 @@ async function loadState() {
 
 function render() {
   renderNavigation();
-  el.headline.textContent = state.workspace ? state.workspace.name : "Workspace setup";
+  if (el.headline) {
+    el.headline.textContent = state.workspace ? state.workspace.name : "Workspace setup";
+  }
 
   if (!state.workspace) {
     showOnly("setup");
-    renderSetup();
+    if (el.setupView) {
+      renderSetup();
+    }
     return;
   }
 
-  el.weekMeta.textContent = `Week ${weekParts.week}, ${weekParts.year}`;
-  el.editWeekMeta.textContent = `Week ${weekParts.week}, ${weekParts.year}`;
-  el.domainCount.textContent = `${activeDomains().length} active domains`;
-  el.editDomainCount.textContent = `${activeDomains().length} active domains`;
+  if (el.weekMeta) {
+    el.weekMeta.textContent = `Week ${weekParts.week}, ${weekParts.year}`;
+  }
 
   renderCurrent();
   renderEdit();
@@ -169,10 +153,18 @@ function renderNavigation() {
 }
 
 function showOnly(view) {
-  el.setupView.classList.toggle("hidden", view !== "setup");
-  el.currentView.classList.toggle("hidden", view !== "current");
-  el.editView.classList.toggle("hidden", view !== "edit");
-  el.manageView.classList.toggle("hidden", view !== "domains");
+  if (el.setupView) {
+    el.setupView.classList.toggle("hidden", view !== "setup");
+  }
+  if (el.currentView) {
+    el.currentView.classList.toggle("hidden", view !== "current");
+  }
+  if (el.editView) {
+    el.editView.classList.toggle("hidden", view !== "edit");
+  }
+  if (el.manageView) {
+    el.manageView.classList.toggle("hidden", view !== "domains");
+  }
 }
 
 function setActiveView(view) {
@@ -181,6 +173,7 @@ function setActiveView(view) {
 }
 
 function renderSetup() {
+  if (!el.setupDomains || !el.setupStatus) return;
   el.setupDomains.replaceChildren(...state.setupDraft.map((item, index) => renderSetupDomain(item, index)));
   setStatus(el.setupStatus, "");
 }
@@ -222,6 +215,7 @@ function moveSetupDomain(index, offset) {
 }
 
 function renderCurrent() {
+  if (!el.currentGroups) return;
   const review = state.currentReview;
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   const grouped = {
@@ -235,52 +229,46 @@ function renderCurrent() {
     grouped[currentState.mode].push({ domain, state: currentState });
   }
 
-  el.currentGroups.replaceChildren(
-    renderGroup("Focus", "Focus", grouped.focus),
-    renderGroup("Maintenance", "Maintenance", grouped.maintain),
-    renderGroup("Ignored", "Ignored", grouped.ignore),
-  );
+  const groups = [
+    ["Focus", grouped.focus],
+    ["Maintenance", grouped.maintain],
+    ["Ignored", grouped.ignore],
+  ].filter(([, entries]) => entries.length > 0);
+
+  el.currentGroups.replaceChildren(...groups.map(([title, entries]) => renderGroup(title, entries)));
 }
 
-function renderGroup(title, headline, entries) {
+function renderGroup(title, entries) {
   const section = document.createElement("section");
   section.className = "domain-group";
-  section.innerHTML = `
-    <h3 class="section-title">${escapeHtml(title)}</h3>
-    <div class="rule"></div>
-  `;
+  const heading = document.createElement("h3");
+  heading.className = "section-title";
+  heading.textContent = title;
   const body = document.createElement("div");
-  body.className = "domains";
-  if (entries.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "muted";
-    empty.textContent = "None";
-    body.appendChild(empty);
-  } else {
-    for (const entry of entries) {
-      body.appendChild(renderCurrentRow(entry.domain, entry.state));
-    }
+  body.className = "current-rows";
+  for (const entry of entries) {
+    body.appendChild(renderCurrentRow(entry.domain, entry.state));
   }
-  section.appendChild(body);
+  section.append(heading, body);
   return section;
 }
 
 function renderCurrentRow(domain, currentState) {
+  const status = currentState.status || "good";
+  const [symbol, label] = statusLabels[status] || statusLabels.good;
   const row = document.createElement("div");
-  row.className = "domain";
+  row.className = "current-row";
   row.innerHTML = `
-    <div class="domain-head">
-      <div class="domain-name">${escapeHtml(domain.name)}</div>
-      <div class="status-mark" data-status="${currentState.status || "good"}">
-        <span class="status-symbol">${statusLabels[currentState.status]?.[0] || "○"}</span>
-        <span class="status-text">${statusLabels[currentState.status]?.[1] || "Stable"}</span>
-      </div>
-    </div>
+    <span class="domain-name">${escapeHtml(domain.name)}</span>
+    <span class="status-mark" data-status="${status}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
+      <span class="status-symbol" aria-hidden="true">${symbol}</span>
+    </span>
   `;
   return row;
 }
 
 function renderEdit() {
+  if (!el.reviewDomains) return;
   const review = state.currentReview;
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   const active = activeDomains();
@@ -325,27 +313,22 @@ function renderEditRow(domain, currentState) {
 }
 
 function renderDomains() {
+  if (!el.manageDomains || !el.archivedDomains) return;
   const active = activeDomains();
   const archived = state.domains.filter((domain) => domain.archived_at !== null).sort(bySortOrder);
-  el.manageDomains.replaceChildren(...active.map((domain) => renderManagedDomain(domain, false)));
-  el.archivedDomains.replaceChildren(...archived.map((domain) => renderManagedDomain(domain, true)));
+  el.manageDomains.replaceChildren(...active.map((domain) => renderActiveDomainRow(domain)));
+  el.archivedDomains.replaceChildren(...archived.map((domain) => renderArchivedDomainRow(domain)));
+  enableDragReorder(el.manageDomains);
 }
 
-function renderManagedDomain(domain, archived) {
-  const row = document.createElement("section");
-  row.className = "domain";
+function renderActiveDomainRow(domain) {
+  const row = document.createElement("div");
+  row.className = "domain-row";
+  row.dataset.id = String(domain.id);
   row.innerHTML = `
-    <div class="domain-grid">
-      <label class="full">Domain
-        <input type="text" name="domain_name_${domain.id}" value="${escapeHtml(domain.name)}" autocomplete="off">
-      </label>
-      <div class="domain-actions full">
-        ${archived ? `<button class="secondary" type="button" data-restore="${domain.id}">Restore</button>` : ""}
-        ${!archived ? `<button class="secondary" type="button" data-up="${domain.id}">Up</button>` : ""}
-        ${!archived ? `<button class="secondary" type="button" data-down="${domain.id}">Down</button>` : ""}
-        ${!archived ? `<button class="ghost" type="button" data-archive="${domain.id}">Archive</button>` : ""}
-      </div>
-    </div>
+    <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+    <input class="inline-input" type="text" value="${escapeHtml(domain.name)}" autocomplete="off" aria-label="Domain name">
+    <button class="ghost row-action" type="button" data-archive="${domain.id}">Archive</button>
   `;
   const input = row.querySelector("input");
   input.addEventListener("change", async () => withStatus(el.manageStatus, async () => {
@@ -356,15 +339,63 @@ function renderManagedDomain(domain, archived) {
     await loadState();
     render();
   }));
-  const up = row.querySelector("[data-up]");
-  const down = row.querySelector("[data-down]");
-  const archive = row.querySelector("[data-archive]");
-  const restore = row.querySelector("[data-restore]");
-  if (up) up.addEventListener("click", () => moveDomain(domain.id, -1));
-  if (down) down.addEventListener("click", () => moveDomain(domain.id, 1));
-  if (archive) archive.addEventListener("click", () => archiveDomain(domain.id));
-  if (restore) restore.addEventListener("click", () => restoreDomain(domain.id));
+  row.querySelector("[data-archive]").addEventListener("click", () => archiveDomain(domain.id));
   return row;
+}
+
+function renderArchivedDomainRow(domain) {
+  const row = document.createElement("div");
+  row.className = "domain-row";
+  row.innerHTML = `
+    <span class="domain-name-static">${escapeHtml(domain.name)}</span>
+    <button class="ghost row-action" type="button" data-restore="${domain.id}">Restore</button>
+  `;
+  row.querySelector("[data-restore]").addEventListener("click", () => restoreDomain(domain.id));
+  return row;
+}
+
+function enableDragReorder(container) {
+  const originalOrder = [...container.querySelectorAll(".domain-row")].map((row) => row.dataset.id);
+  container.querySelectorAll(".drag-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      const draggingRow = handle.closest(".domain-row");
+      if (!draggingRow) return;
+      event.preventDefault();
+      draggingRow.classList.add("dragging");
+      handle.setPointerCapture(event.pointerId);
+
+      const onMove = (moveEvent) => {
+        for (const sibling of container.querySelectorAll(".domain-row")) {
+          if (sibling === draggingRow) continue;
+          const rect = sibling.getBoundingClientRect();
+          if (moveEvent.clientY < rect.top || moveEvent.clientY > rect.bottom) continue;
+          const before = moveEvent.clientY < rect.top + rect.height / 2;
+          container.insertBefore(draggingRow, before ? sibling : sibling.nextSibling);
+          break;
+        }
+      };
+
+      const onUp = async () => {
+        draggingRow.classList.remove("dragging");
+        handle.releasePointerCapture(event.pointerId);
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        const newOrder = [...container.querySelectorAll(".domain-row")].map((row) => row.dataset.id);
+        if (newOrder.join() === originalOrder.join()) return;
+        await withStatus(el.manageStatus, async () => {
+          await fetchJSON(`/workspaces/${state.workspace.id}/domains/order`, {
+            method: "PUT",
+            body: JSON.stringify({ domain_ids: newOrder.map(Number) }),
+          });
+          await loadState();
+          render();
+        });
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+  });
 }
 
 async function saveSetup() {
@@ -404,30 +435,6 @@ async function saveReview() {
   });
   await loadState();
   state.activeView = "current";
-  render();
-}
-
-async function saveDomainOrder() {
-  const ids = activeDomains().map((domain) => domain.id);
-  await fetchJSON(`/workspaces/${state.workspace.id}/domains/order`, {
-    method: "PUT",
-    body: JSON.stringify({ domain_ids: ids }),
-  });
-  await loadState();
-  render();
-}
-
-async function moveDomain(domainId, offset) {
-  const ids = activeDomains().map((domain) => domain.id);
-  const index = ids.indexOf(domainId);
-  const target = index + offset;
-  if (index < 0 || target < 0 || target >= ids.length) return;
-  [ids[index], ids[target]] = [ids[target], ids[index]];
-  await fetchJSON(`/workspaces/${state.workspace.id}/domains/order`, {
-    method: "PUT",
-    body: JSON.stringify({ domain_ids: ids }),
-  });
-  await loadState();
   render();
 }
 
@@ -512,11 +519,6 @@ async function fetchJSON(path, options = {}) {
     throw error;
   }
   return data;
-}
-
-function setActiveView(view) {
-  state.activeView = view;
-  render();
 }
 
 function bySortOrder(left, right) {

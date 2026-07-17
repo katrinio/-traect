@@ -19,7 +19,6 @@
           <h1>-traect</h1>
           <div class="meta" id="headline"></div>
         </div>
-        <div class="meta" id="save-state"></div>
       </header>
 
       <nav aria-label="Sections" id="main-nav">
@@ -29,13 +28,7 @@
 
       <main>
         <section id="current-view">
-          <div class="toolbar">
-            <div>
-              <h2 class="section-title">Current</h2>
-              <div class="meta" id="week-meta"></div>
-            </div>
-            <div class="meta" id="domain-count"></div>
-          </div>
+          <div class="meta" id="week-meta"></div>
 
           <section class="current-groups" id="current-groups"></section>
 
@@ -45,13 +38,7 @@
         </section>
 
         <section id="edit-view" class="hidden">
-          <div class="toolbar">
-            <div>
-              <h2 class="section-title">Edit review</h2>
-              <div class="meta" id="edit-week-meta"></div>
-            </div>
-            <div class="meta" id="edit-domain-count"></div>
-          </div>
+          <div class="view-title">Edit review</div>
 
           <form id="review-form" class="split">
             <section>
@@ -81,25 +68,16 @@
         </section>
 
         <section id="manage-view" class="manage hidden">
-          <div>
-            <h2 class="section-title">Domains</h2>
-            <p class="hint">Rename, reorder, archive, and restore domains here. Archived domains stay in historical weeks, but they do not enter new weekly reviews automatically.</p>
+          <div class="toolbar">
+            <h3 class="section-title">Active</h3>
+            <button class="ghost" type="button" id="add-active-domain">Add Domain</button>
           </div>
-          <form id="domain-form" class="split">
-            <div class="toolbar">
-              <h3 class="section-title">Active Domains</h3>
-              <button class="ghost" type="button" id="add-active-domain">Add Domain</button>
-            </div>
-            <div id="manage-domains" class="domains"></div>
-            <div class="actions actions-left">
-              <button class="secondary" type="button" id="save-order">Save Order</button>
-            </div>
-            <div class="status" id="manage-status"></div>
-          </form>
+          <div id="manage-domains" class="domain-list"></div>
+          <div class="status" id="manage-status"></div>
 
           <section>
             <h3 class="section-title">Archived</h3>
-            <div id="archived-domains" class="domains"></div>
+            <div id="archived-domains" class="domain-list"></div>
           </section>
         </section>
       </main>

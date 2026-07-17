@@ -9,7 +9,7 @@ label {
   display: grid;
   gap: var(--space-2);
   font-size: 0.88rem;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 
 select,
@@ -33,7 +33,7 @@ select:focus,
 textarea:focus,
 input[type="text"]:focus,
 button:focus {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--focus-blue);
   outline-offset: 2px;
 }
 
@@ -75,9 +75,54 @@ button:focus {
 .ghost {
   border: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 0.5rem 0.2rem;
   min-height: 2.25rem;
+}
+
+.row-action {
+  flex: none;
+}
+
+.drag-handle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: grab;
+  padding: 0.5rem 0.2rem;
+  touch-action: none;
+  user-select: none;
+  font-size: 1rem;
+  letter-spacing: -0.1em;
+}
+
+.domain-row.dragging {
+  opacity: 0.6;
+}
+
+.inline-input {
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  padding: 0.5rem 0.6rem;
+  min-height: 2.25rem;
+}
+
+.inline-input:hover {
+  border-color: var(--border);
+}
+
+.inline-input:focus {
+  border-color: var(--focus-blue);
+  background: var(--surface);
+  outline: none;
+}
+
+.domain-name-static {
+  color: var(--text-muted);
+  padding: 0.5rem 0.6rem;
 }
 
 .status {
@@ -87,7 +132,6 @@ button:focus {
 .status-mark {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.45rem;
   font-weight: 600;
 }
 
@@ -96,22 +140,11 @@ button:focus {
 }
 
 .status-mark[data-status="good"] .status-symbol {
-  color: var(--focus-blue);
-}
-
-.status-mark[data-status="good"] .status-text,
-.status-mark[data-status="warning"] .status-text,
-.status-mark[data-status="critical"] .status-text,
-.status-mark[data-status="inactive"] .status-text {
-  color: var(--text);
-}
-
-.status-mark[data-status="good"] .status-symbol {
-  color: var(--focus-blue);
+  color: var(--maintain-green);
 }
 
 .status-mark[data-status="warning"] .status-symbol {
-  color: var(--maintain-green);
+  color: var(--risk-amber);
 }
 
 .status-mark[data-status="critical"] .status-symbol {

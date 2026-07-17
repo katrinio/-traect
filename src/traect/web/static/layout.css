@@ -64,18 +64,52 @@ section {
 
 .domain-group {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-1);
 }
 
-.rule {
+.domain-group .section-title {
+  padding-bottom: var(--space-1);
   border-bottom: 1px solid var(--border);
-  width: 100%;
+}
+
+.current-rows {
+  display: grid;
+}
+
+.current-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.domain-list {
+  display: grid;
+}
+
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.domain-row:last-child {
+  border-bottom: 0;
+}
+
+.domain-row .inline-input,
+.domain-row .domain-name-static {
+  flex: 1;
+  min-width: 0;
 }
 
 .domain {
   display: grid;
   gap: var(--space-3);
-  padding-top: var(--space-3);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border);
 }
 
