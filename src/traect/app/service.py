@@ -11,6 +11,15 @@ from traect.app.errors import ConflictError, NotFoundError, ValidationError
 from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Domain, Week, WeekDomainState, Workspace
 
+MINIMUM_ACCEPTABLE_LEVEL_LIMIT = 500
+
+
+class _Unset:
+    pass
+
+
+UNSET = _Unset()
+
 
 def _week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
     starts_on = date.fromisocalendar(iso_year, iso_week, 1)
@@ -45,16 +54,30 @@ class TraectService:
         self.session.flush()
         return workspace
 
-    def create_workspace_with_domains(self, name: str, domain_names: list[str]) -> Workspace:
+    def create_workspace_with_domains(
+        self,
+        name: str,
+        domain_names: list[str],
+        minimum_acceptable_levels: list[str | None] | None = None,
+    ) -> Workspace:
         self._validate_workspace_name(name)
         cleaned_names = [self._normalize_domain_name(domain_name) for domain_name in domain_names]
         if not cleaned_names or any(not domain_name for domain_name in cleaned_names):
             raise ValidationError("at least one domain is required")
         if len({domain_name.casefold() for domain_name in cleaned_names}) != len(cleaned_names):
             raise ValidationError("domain names must be unique within a workspace")
+        if minimum_acceptable_levels is None:
+            minimum_acceptable_levels = [None] * len(cleaned_names)
+        if len(minimum_acceptable_levels) != len(cleaned_names):
+            raise ValidationError("each initial Domain must have one minimum acceptable level value")
+        normalized_levels = [self._normalize_minimum_acceptable_level(value) for value in minimum_acceptable_levels]
         workspace = self.create_workspace(name)
-        for index, domain_name in enumerate(cleaned_names):
-            domain = Domain(name=domain_name, sort_order=index)
+        for index, (domain_name, minimum_acceptable_level) in enumerate(zip(cleaned_names, normalized_levels)):
+            domain = Domain(
+                name=domain_name,
+                sort_order=index,
+                minimum_acceptable_level=minimum_acceptable_level,
+            )
             domain.workspace_id = workspace.id
             self.session.add(domain)
         self.session.flush()
@@ -72,7 +95,13 @@ class TraectService:
             raise NotFoundError("workspace not found")
         return workspace
 
-    def create_domain(self, workspace_id: int, name: str) -> Domain:
+    def create_domain(
+        self,
+        workspace_id: int,
+        name: str,
+        *,
+        minimum_acceptable_level: str | None = None,
+    ) -> Domain:
         workspace = self.get_workspace(workspace_id)
         cleaned_name = self._normalize_domain_name(name)
         if not cleaned_name:
@@ -80,7 +109,11 @@ class TraectService:
         self._ensure_active_domain_name_unique(workspace.id, cleaned_name)
 
         next_order = self._next_domain_sort_order(workspace.id)
-        domain = Domain(name=cleaned_name, sort_order=next_order)
+        domain = Domain(
+            name=cleaned_name,
+            sort_order=next_order,
+            minimum_acceptable_level=self._normalize_minimum_acceptable_level(minimum_acceptable_level),
+        )
         domain.workspace_id = workspace.id
         domain.archived_at = None
         self.session.add(domain)
@@ -95,7 +128,14 @@ class TraectService:
         stmt = stmt.order_by(Domain.archived_at.is_not(None), Domain.sort_order, Domain.id)
         return list(self.session.execute(stmt).scalars())
 
-    def update_domain(self, domain_id: int, *, name: str | None = None, sort_order: int | None = None) -> Domain:
+    def update_domain(
+        self,
+        domain_id: int,
+        *,
+        name: str | None = None,
+        sort_order: int | None = None,
+        minimum_acceptable_level: str | None | _Unset = UNSET,
+    ) -> Domain:
         domain = self.get_domain(domain_id)
         if name is not None:
             cleaned_name = self._normalize_domain_name(name)
@@ -105,6 +145,8 @@ class TraectService:
             domain.name = cleaned_name
         if sort_order is not None:
             domain.sort_order = sort_order
+        if not isinstance(minimum_acceptable_level, _Unset):
+            domain.minimum_acceptable_level = self._normalize_minimum_acceptable_level(minimum_acceptable_level)
         self.session.flush()
         return domain
 
@@ -160,7 +202,9 @@ class TraectService:
         if sacrificed_domain_id is not None:
             self._validate_domain_in_workspace(sacrificed_domain_id, workspace.id)
 
-        active_domain_ids = {domain.id for domain in self.list_domains(workspace.id, include_archived=False)}
+        active_domains = self.list_domains(workspace.id, include_archived=False)
+        active_domains_by_id = {domain.id: domain for domain in active_domains}
+        active_domain_ids = set(active_domains_by_id)
         if states is None:
             states = [
                 WeekStateInput(
@@ -199,21 +243,23 @@ class TraectService:
         for state_input in states:
             self._validate_domain_in_workspace(state_input.domain_id, workspace.id)
             current = state_by_domain_id.get(state_input.domain_id)
-            domain_name = self.get_domain(state_input.domain_id).name
+            domain = active_domains_by_id[state_input.domain_id]
             if current is None:
                 state = WeekDomainState(
-                    domain_name=domain_name,
+                    domain_name=domain.name,
                     condition=state_input.condition,
                     attention=state_input.attention,
+                    minimum_acceptable_level_snapshot=domain.minimum_acceptable_level,
                     comment=state_input.comment,
                 )
                 state.week_id = week.id
                 state.domain_id = state_input.domain_id
                 week.domain_states.append(state)
             else:
-                current.domain_name = domain_name
+                current.domain_name = domain.name
                 current.condition = state_input.condition
                 current.attention = state_input.attention
+                current.minimum_acceptable_level_snapshot = domain.minimum_acceptable_level
                 current.comment = state_input.comment
 
         self.session.flush()
@@ -353,3 +399,15 @@ class TraectService:
 
     def _normalize_domain_name(self, name: str) -> str:
         return name.strip()
+
+    def _normalize_minimum_acceptable_level(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValidationError("minimum acceptable level must be a string or null")
+        normalized = value.strip()
+        if len(normalized) > MINIMUM_ACCEPTABLE_LEVEL_LIMIT:
+            raise ValidationError(
+                f"minimum acceptable level must be {MINIMUM_ACCEPTABLE_LEVEL_LIMIT} characters or fewer"
+            )
+        return normalized or None

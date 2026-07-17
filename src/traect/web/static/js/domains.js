@@ -1,4 +1,4 @@
-import { bySortOrder, escapeHtml } from "/js/presentation.js";
+import { bySortOrder, escapeHtml, minimumAcceptableLevelLimit } from "/js/presentation.js";
 
 export function renderDomainManagement(elements, domains, callbacks) {
   if (!elements.active || !elements.archived) return;
@@ -11,15 +11,24 @@ export function renderDomainManagement(elements, domains, callbacks) {
 
 function renderActiveDomainRow(domain, callbacks) {
   const row = document.createElement("div");
-  row.className = "domain-row";
+  row.className = "domain-row domain-config-row";
   row.dataset.id = String(domain.id);
+  const descriptionId = `minimum-level-help-${domain.id}`;
   row.innerHTML = `
     <span class="drag-handle" aria-hidden="true">⋮⋮</span>
     <input class="inline-input" type="text" value="${escapeHtml(domain.name)}" autocomplete="off" aria-label="Domain name">
     <button class="ghost row-action" type="button" data-archive="${domain.id}">Archive</button>
+    <label class="minimum-level-field">Minimum acceptable level
+      <textarea maxlength="${minimumAcceptableLevelLimit}" aria-describedby="${descriptionId}"
+        placeholder="What is the minimum state that still feels acceptable?"></textarea>
+      <span class="hint" id="${descriptionId}">A short description of what still counts as acceptable for this Domain.</span>
+    </label>
   `;
   const input = row.querySelector("input");
+  const minimumLevel = row.querySelector("textarea");
+  minimumLevel.value = domain.minimum_acceptable_level || "";
   input.addEventListener("change", () => callbacks.onRename(domain.id, input.value));
+  minimumLevel.addEventListener("change", () => callbacks.onMinimumLevel(domain.id, minimumLevel.value));
   row.querySelector("[data-archive]").addEventListener("click", () => callbacks.onArchive(domain.id));
   return row;
 }

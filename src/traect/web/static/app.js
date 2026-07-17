@@ -116,6 +116,13 @@ function render() {
 
   renderCurrentMetadata();
   const active = activeDomains(state.domains);
+  const reviewContextByDomainId = new Map(
+    (state.currentWeek?.review_domains || []).map((domain) => [domain.domain_id, domain]),
+  );
+  const reviewDomains = active.map((domain) => ({
+    ...domain,
+    minimum_acceptable_level: reviewContextByDomainId.get(domain.id)?.minimum_acceptable_level ?? null,
+  }));
   renderCurrent(
     { groups: el.currentGroups, tradeoff: el.currentTradeoff, tradeoffContent: el.currentTradeoffContent },
     active,
@@ -123,7 +130,7 @@ function render() {
     state.domains,
   );
   renderTimelineView();
-  renderReview(el.reviewDomains, active, state.currentReview);
+  renderReview(el.reviewDomains, reviewDomains, state.currentReview);
   renderDomainsView();
   showOnly(state.activeView);
 }
@@ -216,6 +223,10 @@ function renderDomainsView() {
     state.domains,
     {
       onRename: (domainId, name) => withStatus(el.manageStatus, () => renameDomain(domainId, name)),
+      onMinimumLevel: (domainId, value) => withStatus(
+        el.manageStatus,
+        () => updateMinimumAcceptableLevel(domainId, value),
+      ),
       onArchive: (domainId) => withStatus(el.manageStatus, () => archiveDomain(domainId)),
       onRestore: (domainId) => withStatus(el.manageStatus, () => restoreDomain(domainId)),
       onReorder: (domainIds) => withStatus(el.manageStatus, () => reorderDomains(domainIds)),
@@ -252,6 +263,14 @@ async function saveReview() {
 
 async function renameDomain(domainId, name) {
   await fetchJSON(`/domains/${domainId}`, { method: "PATCH", body: JSON.stringify({ name }) });
+  await refresh();
+}
+
+async function updateMinimumAcceptableLevel(domainId, value) {
+  await fetchJSON(`/domains/${domainId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ minimum_acceptable_level: value.trim() || null }),
+  });
   await refresh();
 }
 

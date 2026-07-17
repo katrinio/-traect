@@ -1,4 +1,5 @@
 export const commentLimit = 300;
+export const minimumAcceptableLevelLimit = 500;
 
 export const attentionPresentation = {
   primary_focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },

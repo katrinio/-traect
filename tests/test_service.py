@@ -496,7 +496,7 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
     try:
         with verification_engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0007_historical_week_corrections"
+                "0008_minimum_acceptable_level"
             )
     finally:
         verification_engine.dispose()
@@ -845,6 +845,7 @@ def test_canonical_week_state_values_round_trip(tmp_path: Path, attention: str, 
         "domain_name": "Work",
         "attention": attention,
         "condition": condition,
+        "minimum_acceptable_level": None,
         "comment": None,
     }
     assert "mode" not in state
@@ -989,6 +990,7 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
         "iso_week": 29,
         "lifecycle": "provisional",
         "editable": True,
+        "review_domains": [{"domain_id": 1, "name": "Work", "minimum_acceptable_level": None}],
         "review": None,
     }
     assert json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"]) == {"items": []}

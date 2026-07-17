@@ -9,23 +9,36 @@ from traect.api.serializers import (
     workspace_response,
 )
 from traect.app.errors import NotFoundError, ValidationError
-from traect.app.service import TraectService, WeekStateInput
+from traect.app.service import UNSET, TraectService, WeekStateInput
 from traect.domain.enums import DomainAttention, DomainCondition
 
 
 def dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any]) -> Any:
     parts = [part for part in path.split("/") if part]
     if method == "POST" and parts == ["workspaces"]:
-        domains = [item["name"] for item in payload.get("domains", [])]
+        domain_items = payload.get("domains", [])
+        domains = [item["name"] for item in domain_items]
         if domains:
-            return workspace_response(service.create_workspace_with_domains(payload["name"], domains))
+            return workspace_response(
+                service.create_workspace_with_domains(
+                    payload["name"],
+                    domains,
+                    [item.get("minimum_acceptable_level") for item in domain_items],
+                )
+            )
         return workspace_response(service.create_workspace(payload["name"]))
     if method == "GET" and parts == ["workspaces", "current"]:
         return workspace_response(service.get_current_workspace())
     if method == "GET" and len(parts) == 2 and parts[0] == "workspaces":
         return workspace_response(service.get_workspace(int(parts[1])))
     if method == "POST" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
-        return domain_response(service.create_domain(int(parts[1]), payload["name"]))
+        return domain_response(
+            service.create_domain(
+                int(parts[1]),
+                payload["name"],
+                minimum_acceptable_level=payload.get("minimum_acceptable_level"),
+            )
+        )
     if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
         return {"items": [domain_response(domain) for domain in service.list_domains(int(parts[1]))]}
     if (
@@ -38,7 +51,13 @@ def dispatch(service: TraectService, method: str, path: str, payload: dict[str, 
         domains = service.reorder_domains(int(parts[1]), [int(domain_id) for domain_id in payload["domain_ids"]])
         return {"items": [domain_response(domain) for domain in domains]}
     if method == "PATCH" and len(parts) == 2 and parts[0] == "domains":
-        domain = service.update_domain(int(parts[1]), name=payload.get("name"), sort_order=payload.get("sort_order"))
+        minimum_acceptable_level = payload.get("minimum_acceptable_level", UNSET)
+        domain = service.update_domain(
+            int(parts[1]),
+            name=payload.get("name"),
+            sort_order=payload.get("sort_order"),
+            minimum_acceptable_level=minimum_acceptable_level,
+        )
         return domain_response(domain)
     if method == "POST" and len(parts) == 3 and parts[0] == "domains" and parts[2] == "archive":
         return domain_response(service.archive_domain(int(parts[1])))
