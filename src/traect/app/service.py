@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, tzinfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from traect.app.errors import NotFoundError, ValidationError
-from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.app.errors import ConflictError, NotFoundError, ValidationError
+from traect.domain.enums import ReviewLifecycle, WeekDomainMode, WeekDomainStatus
 from traect.domain.models import Domain, Week, WeekDomainState, Workspace
 
 
@@ -26,8 +27,16 @@ class WeekStateInput:
 
 
 class TraectService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        clock: Callable[[], datetime] | None = None,
+        timezone: tzinfo = UTC,
+    ) -> None:
         self.session = session
+        self.clock = clock or (lambda: datetime.now(UTC))
+        self.timezone = timezone
 
     def create_workspace(self, name: str) -> Workspace:
         self._validate_workspace_name(name)
@@ -143,6 +152,9 @@ class TraectService:
         states: list[WeekStateInput] | None = None,
     ) -> Week:
         workspace = self.get_workspace(workspace_id)
+        lifecycle = self.lifecycle_for_week(iso_year, iso_week)
+        if lifecycle == ReviewLifecycle.FINAL:
+            raise ConflictError("This weekly review is final and can no longer be edited.")
         starts_on, ends_on = _week_bounds(iso_year, iso_week)
         week = self._get_or_create_week(workspace.id, iso_year, iso_week, starts_on, ends_on)
 
@@ -212,15 +224,41 @@ class TraectService:
         self.session.flush()
         return week
 
-    def get_current_week(self, workspace_id: int, today: date | None = None) -> Week:
-        current_day = today or date.today()
-        iso_year, iso_week, _ = current_day.isocalendar()
-        week = self.session.execute(
-            select(Week).where(Week.workspace_id == workspace_id, Week.iso_year == iso_year, Week.iso_week == iso_week)
-        ).scalar_one_or_none()
+    def get_current_week(self, workspace_id: int) -> Week:
+        week = self.get_current_week_optional(workspace_id)
         if week is None:
             raise NotFoundError("current week not found")
         return week
+
+    def get_current_week_optional(self, workspace_id: int) -> Week | None:
+        self.get_workspace(workspace_id)
+        iso_year, iso_week = self.current_iso_week()
+        return self.session.execute(
+            select(Week).where(Week.workspace_id == workspace_id, Week.iso_year == iso_year, Week.iso_week == iso_week)
+        ).scalar_one_or_none()
+
+    def current_iso_week(self) -> tuple[int, int]:
+        now = self.clock()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        iso_year, iso_week, _ = now.astimezone(self.timezone).date().isocalendar()
+        return iso_year, iso_week
+
+    def lifecycle_for_week(self, iso_year: int, iso_week: int) -> ReviewLifecycle:
+        try:
+            week_start, _ = _week_bounds(iso_year, iso_week)
+        except ValueError as exc:
+            raise ValidationError("weekly review has an invalid ISO year or week") from exc
+        current_year, current_week = self.current_iso_week()
+        current_start, _ = _week_bounds(current_year, current_week)
+        if week_start > current_start:
+            raise ValidationError("A weekly review cannot be created for a future week.")
+        if week_start < current_start:
+            return ReviewLifecycle.FINAL
+        return ReviewLifecycle.PROVISIONAL
+
+    def review_lifecycle(self, week: Week) -> ReviewLifecycle:
+        return self.lifecycle_for_week(week.iso_year, week.iso_week)
 
     def list_weeks(self, workspace_id: int, *, limit: int = 52) -> list[Week]:
         workspace = self.get_workspace(workspace_id)

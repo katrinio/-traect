@@ -13,3 +13,8 @@ class WeekDomainMode(StrEnum):
     FOCUS = "focus"
     MAINTAIN = "maintain"
     IGNORE = "ignore"
+
+
+class ReviewLifecycle(StrEnum):
+    PROVISIONAL = "provisional"
+    FINAL = "final"

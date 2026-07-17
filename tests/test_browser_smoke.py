@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import Any
@@ -12,7 +12,17 @@ from wsgiref.simple_server import WSGIServer, make_server
 import pytest
 from playwright.sync_api import Locator, Page, expect, sync_playwright
 
+from tests.support import MutableClock
 from traect.api.app import build_app
+
+
+class LiveApp(str):
+    clock: MutableClock
+
+    def __new__(cls, value: str, clock: MutableClock) -> LiveApp:
+        instance = super().__new__(cls, value)
+        instance.clock = clock
+        return instance
 
 
 @pytest.fixture
@@ -29,13 +39,14 @@ def page() -> Iterator[Page]:
 
 
 @pytest.fixture
-def live_app(tmp_path: Path) -> Iterator[str]:
-    app = build_app(f"sqlite:///{tmp_path / 'browser.db'}")
+def live_app(tmp_path: Path) -> Iterator[LiveApp]:
+    clock = MutableClock(datetime(2026, 7, 17, 12, tzinfo=UTC))
+    app = build_app(f"sqlite:///{tmp_path / 'browser.db'}", clock=clock)
     server: WSGIServer = make_server("127.0.0.1", 0, app)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_port}"
+        yield LiveApp(f"http://127.0.0.1:{server.server_port}", clock)
     finally:
         server.shutdown()
         server.server_close()
@@ -67,7 +78,7 @@ def seed_workspace(base_url: str, domain_names: list[str]) -> tuple[int, dict[st
 
 
 def save_current_review(
-    base_url: str,
+    base_url: LiveApp,
     workspace_id: int,
     domains: dict[str, int],
     *,
@@ -76,7 +87,7 @@ def save_current_review(
     reason: str | None = None,
     ignored: set[str] | None = None,
 ) -> dict[str, Any]:
-    iso_year, iso_week, _ = date.today().isocalendar()
+    iso_year, iso_week, _ = base_url.clock().date().isocalendar()
     return save_week_review(
         base_url,
         workspace_id,
@@ -91,7 +102,7 @@ def save_current_review(
 
 
 def save_week_review(
-    base_url: str,
+    base_url: LiveApp,
     workspace_id: int,
     domains: dict[str, int],
     iso_year: int,
@@ -114,18 +125,24 @@ def save_week_review(
         }
         for name, domain_id in domains.items()
     ]
-    return request_json(
-        base_url,
-        "PUT",
-        f"/workspaces/{workspace_id}/weeks/{iso_year}/{iso_week}",
-        {
-            "focus_domain_id": domains.get(focus) if focus else None,
-            "sacrificed_domain_id": domains.get(sacrificed) if sacrificed else None,
-            "sacrifice_reason": reason,
-            "notes": None,
-            "states": states,
-        },
-    )
+    previous_now = base_url.clock.value
+    provisional_date = date.fromisocalendar(iso_year, iso_week, 3)
+    base_url.clock.value = datetime.combine(provisional_date, datetime.min.time(), tzinfo=UTC)
+    try:
+        return request_json(
+            base_url,
+            "PUT",
+            f"/workspaces/{workspace_id}/weeks/{iso_year}/{iso_week}",
+            {
+                "focus_domain_id": domains.get(focus) if focus else None,
+                "sacrificed_domain_id": domains.get(sacrificed) if sacrificed else None,
+                "sacrifice_reason": reason,
+                "notes": None,
+                "states": states,
+            },
+        )
+    finally:
+        base_url.clock.value = previous_now
 
 
 def tradeoff_value(page: Page, field: str) -> Locator:
@@ -133,7 +150,7 @@ def tradeoff_value(page: Page, field: str) -> Locator:
 
 
 @pytest.mark.browser
-def test_onboarding_to_weekly_review(page: Page, live_app: str) -> None:
+def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
     page_errors: list[str] = []
     page.on("pageerror", lambda error: page_errors.append(str(error)))
 
@@ -151,7 +168,8 @@ def test_onboarding_to_weekly_review(page: Page, live_app: str) -> None:
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
     expect(current_groups.get_by_text("Health", exact=True)).to_be_visible()
 
-    page.get_by_role("button", name="Edit review").click()
+    page.get_by_role("button", name="Start review").click()
+    expect(page.get_by_text("This review remains provisional until the week ends.", exact=False)).to_be_visible()
     what_gave_way = page.locator("select[name='sacrificed_domain_id']")
     expect(what_gave_way).to_be_disabled()
     page.locator("select[name^='mode_']").first.select_option("focus")
@@ -166,7 +184,7 @@ def test_onboarding_to_weekly_review(page: Page, live_app: str) -> None:
 
 
 @pytest.mark.browser
-def test_current_shows_full_saved_tradeoff_as_read_only_summary(page: Page, live_app: str) -> None:
+def test_current_shows_full_saved_tradeoff_as_read_only_summary(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_current_review(live_app, workspace_id, domains, focus="Work", sacrificed="Health", reason="Release")
 
@@ -178,12 +196,13 @@ def test_current_shows_full_saved_tradeoff_as_read_only_summary(page: Page, live
     expect(tradeoff_value(page, "focus")).to_have_text("Work")
     expect(tradeoff_value(page, "sacrifice")).to_have_text("Health")
     expect(tradeoff_value(page, "reason")).to_have_text("Release")
+    expect(page.locator("#current-lifecycle")).to_have_text("Provisional · changes can still be recorded this week")
     expect(tradeoff.locator("input, select, textarea, button")).to_have_count(0)
     expect(page.get_by_role("button", name="Edit review")).to_have_count(1)
 
 
 @pytest.mark.browser
-def test_current_shows_neutral_state_when_review_has_no_primary_focus(page: Page, live_app: str) -> None:
+def test_current_shows_neutral_state_when_review_has_no_primary_focus(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_current_review(live_app, workspace_id, domains)
 
@@ -195,7 +214,7 @@ def test_current_shows_neutral_state_when_review_has_no_primary_focus(page: Page
 
 
 @pytest.mark.browser
-def test_current_shows_none_recorded_when_focus_has_no_sacrifice(page: Page, live_app: str) -> None:
+def test_current_shows_none_recorded_when_focus_has_no_sacrifice(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_current_review(live_app, workspace_id, domains, focus="Work")
 
@@ -207,7 +226,7 @@ def test_current_shows_none_recorded_when_focus_has_no_sacrifice(page: Page, liv
 
 
 @pytest.mark.browser
-def test_current_omits_why_when_saved_tradeoff_has_no_reason(page: Page, live_app: str) -> None:
+def test_current_omits_why_when_saved_tradeoff_has_no_reason(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_current_review(live_app, workspace_id, domains, focus="Work", sacrificed="Health")
 
@@ -219,17 +238,17 @@ def test_current_omits_why_when_saved_tradeoff_has_no_reason(page: Page, live_ap
 
 
 @pytest.mark.browser
-def test_current_hides_tradeoff_when_week_has_no_saved_review(page: Page, live_app: str) -> None:
+def test_current_hides_tradeoff_when_week_has_no_saved_review(page: Page, live_app: LiveApp) -> None:
     seed_workspace(live_app, ["Work", "Health"])
 
     page.goto(live_app)
 
     expect(page.locator("#current-tradeoff")).to_be_hidden()
-    expect(page.get_by_role("button", name="Edit review")).to_be_visible()
+    expect(page.get_by_role("button", name="Start review")).to_be_visible()
 
 
 @pytest.mark.browser
-def test_current_does_not_infer_sacrifice_from_ignored_domain(page: Page, live_app: str) -> None:
+def test_current_does_not_infer_sacrifice_from_ignored_domain(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_current_review(live_app, workspace_id, domains, focus="Work", ignored={"Health"})
 
@@ -240,7 +259,7 @@ def test_current_does_not_infer_sacrifice_from_ignored_domain(page: Page, live_a
 
 
 @pytest.mark.browser
-def test_current_wraps_long_tradeoff_values_on_mobile_without_changing_data(page: Page, live_app: str) -> None:
+def test_current_wraps_long_tradeoff_values_on_mobile_without_changing_data(page: Page, live_app: LiveApp) -> None:
     focus_name = "Deeply focused project with a deliberately long domain name"
     sacrificed_name = "Long-term recovery and relationships that received less attention"
     reason = "R" * 300
@@ -270,18 +289,18 @@ def test_current_wraps_long_tradeoff_values_on_mobile_without_changing_data(page
 
 @pytest.mark.browser
 @pytest.mark.parametrize("domain_count", [3, 20])
-def test_current_domain_overview_still_handles_domain_counts(page: Page, live_app: str, domain_count: int) -> None:
+def test_current_domain_overview_still_handles_domain_counts(page: Page, live_app: LiveApp, domain_count: int) -> None:
     domain_names = [f"Domain {index}" for index in range(1, domain_count + 1)]
     seed_workspace(live_app, domain_names)
 
     page.goto(live_app)
 
     expect(page.locator("#current-groups .current-row")).to_have_count(domain_count)
-    expect(page.get_by_role("button", name="Edit review")).to_be_visible()
+    expect(page.get_by_role("button", name="Start review")).to_be_visible()
 
 
 @pytest.mark.browser
-def test_timeline_empty_state_and_viewing_it_does_not_create_a_review(page: Page, live_app: str) -> None:
+def test_timeline_empty_state_and_viewing_it_does_not_create_a_review(page: Page, live_app: LiveApp) -> None:
     workspace_id, _ = seed_workspace(live_app, ["Work"])
 
     page.goto(live_app)
@@ -295,7 +314,7 @@ def test_timeline_empty_state_and_viewing_it_does_not_create_a_review(page: Page
 
 
 @pytest.mark.browser
-def test_timeline_orders_weeks_and_renders_tradeoff_variants(page: Page, live_app: str) -> None:
+def test_timeline_orders_weeks_and_renders_tradeoff_variants(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
     save_week_review(live_app, workspace_id, domains, 2026, 25)
     save_week_review(live_app, workspace_id, domains, 2026, 26, focus="Work")
@@ -334,9 +353,9 @@ def test_timeline_orders_weeks_and_renders_tradeoff_variants(page: Page, live_ap
 
 
 @pytest.mark.browser
-def test_timeline_places_saved_current_week_first(page: Page, live_app: str) -> None:
+def test_timeline_places_saved_current_week_first(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work"])
-    today = date.today()
+    today = live_app.clock().date()
     current_year, current_week, _ = today.isocalendar()
     prior_year, prior_week, _ = (today - timedelta(days=7)).isocalendar()
     save_week_review(live_app, workspace_id, domains, prior_year, prior_week)
@@ -348,10 +367,15 @@ def test_timeline_places_saved_current_week_first(page: Page, live_app: str) -> 
     headings = page.locator(".timeline-week-heading")
     expect(headings).to_have_count(2)
     expect(headings.first).to_have_text(f"Week {current_week}, {current_year}")
+    weeks = page.locator(".timeline-week")
+    expect(weeks.nth(0).locator(".timeline-week-lifecycle")).to_have_text("Provisional")
+    expect(weeks.nth(1).locator(".timeline-week-lifecycle")).to_have_text("Final")
+    expect(weeks.nth(0).get_by_role("button", name="Edit review")).to_be_visible()
+    expect(weeks.nth(1).get_by_role("button", name="Edit review")).to_have_count(0)
 
 
 @pytest.mark.browser
-def test_timeline_keeps_attention_condition_and_historical_domains_separate(page: Page, live_app: str) -> None:
+def test_timeline_keeps_attention_condition_and_historical_domains_separate(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health", "Sport"])
     save_week_review(
         live_app,
@@ -385,7 +409,7 @@ def test_timeline_keeps_attention_condition_and_historical_domains_separate(page
 
 @pytest.mark.browser
 @pytest.mark.parametrize("week_count", [1, 5, 20, 52])
-def test_timeline_handles_expected_history_sizes(page: Page, live_app: str, week_count: int) -> None:
+def test_timeline_handles_expected_history_sizes(page: Page, live_app: LiveApp, week_count: int) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work"])
     for week in range(1, week_count + 1):
         save_week_review(live_app, workspace_id, domains, 2025, week)
@@ -397,7 +421,7 @@ def test_timeline_handles_expected_history_sizes(page: Page, live_app: str, week
 
 
 @pytest.mark.browser
-def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: Page, live_app: str) -> None:
+def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: Page, live_app: LiveApp) -> None:
     long_name = "Long historical Domain name " + "D" * 85
     long_reason = "R" * 240
     workspace_id, domains = seed_workspace(live_app, [long_name])
@@ -443,7 +467,7 @@ def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: P
 
 
 @pytest.mark.browser
-def test_timeline_failed_request_is_actionable(page: Page, live_app: str) -> None:
+def test_timeline_failed_request_is_actionable(page: Page, live_app: LiveApp) -> None:
     workspace_id, _ = seed_workspace(live_app, ["Work"])
     page.route(
         f"{live_app}/workspaces/{workspace_id}/weeks",
@@ -455,3 +479,44 @@ def test_timeline_failed_request_is_actionable(page: Page, live_app: str) -> Non
 
     expect(page.get_by_text("Timeline could not be loaded. Try again.", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Retry")).to_be_visible()
+
+
+@pytest.mark.browser
+def test_current_uses_backend_week_context_instead_of_browser_date(page: Page, live_app: LiveApp) -> None:
+    workspace_id, _ = seed_workspace(live_app, ["Work"])
+    page.route(
+        f"{live_app}/workspaces/{workspace_id}/weeks/current-context",
+        lambda route: route.fulfill(
+            json={
+                "iso_year": 2020,
+                "iso_week": 53,
+                "lifecycle": "provisional",
+                "editable": True,
+                "review": None,
+            }
+        ),
+    )
+
+    page.goto(live_app)
+
+    expect(page.locator("#week-meta")).to_have_text("Week 53, 2020")
+    expect(page.get_by_role("button", name="Start review")).to_be_visible()
+
+
+@pytest.mark.browser
+def test_final_update_error_is_shown_in_edit_review(page: Page, live_app: LiveApp) -> None:
+    workspace_id, _ = seed_workspace(live_app, ["Work"])
+    page.route(
+        f"{live_app}/workspaces/{workspace_id}/weeks/2026/29",
+        lambda route: route.fulfill(
+            status=409,
+            json={"error": "This weekly review is final and can no longer be edited."},
+        ),
+    )
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Start review").click()
+    page.get_by_role("button", name="Save").click()
+
+    expect(page.locator("#review-status")).to_have_text("This weekly review is final and can no longer be edited.")
+    assert request_json(live_app, "GET", f"/workspaces/{workspace_id}/weeks")["items"] == []
