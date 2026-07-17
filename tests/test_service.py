@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from tests.support import MutableClock, week_clock
 from tests.support import wsgi_request as _request
-from traect.api.app import build_app
+from traect.api.app import build_app, server_address_from_environment
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
@@ -45,6 +46,41 @@ def test_canonical_enums_and_model_fields() -> None:
     assert "status" not in WeekDomainState.__table__.columns
     assert "focus_domain_id" not in Week.__table__.columns
     assert "focus_domain_name" not in Week.__table__.columns
+
+
+def test_health_endpoint_is_available_without_workspace(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'health.db'}")
+
+    response = _request(app, "GET", "/health")
+
+    assert response["status"].startswith("200")
+    assert json.loads(response["body"]) == {"status": "ok"}
+
+
+def test_health_endpoint_reports_unavailable_database(tmp_path: Path) -> None:
+    database_dir = tmp_path / "database"
+    database_dir.mkdir()
+    app = build_app(f"sqlite:///{database_dir / 'health.db'}")
+    shutil.rmtree(database_dir)
+
+    response = _request(app, "GET", "/health")
+
+    assert response["status"].startswith("503")
+    assert json.loads(response["body"]) == {"status": "unavailable"}
+
+
+def test_server_address_uses_environment_and_rejects_invalid_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRAECT_HOST", raising=False)
+    monkeypatch.delenv("TRAECT_PORT", raising=False)
+    assert server_address_from_environment() == ("127.0.0.1", 8000)
+
+    monkeypatch.setenv("TRAECT_HOST", "0.0.0.0")
+    monkeypatch.setenv("TRAECT_PORT", "9876")
+    assert server_address_from_environment() == ("0.0.0.0", 9876)
+
+    monkeypatch.setenv("TRAECT_PORT", "invalid")
+    with pytest.raises(ValueError, match="TRAECT_PORT"):
+        server_address_from_environment()
 
 
 def test_create_and_list_domains(session: Session) -> None:
