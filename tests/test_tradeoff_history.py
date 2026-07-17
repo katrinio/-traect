@@ -203,6 +203,42 @@ def test_missing_current_domain_reference_and_same_names_keep_stable_identities(
     assert len(payload["pairs"]) == 2
 
 
+def test_tradeoff_history_domain_identity_fallback_rules() -> None:
+    payload = aggregate(
+        [week(3, 3), week(2, 2), week(1, 1)],
+        [
+            state(1, 3, 1, "", "primary_focus"),
+            state(2, 2, 9, "Ghost", "primary_focus"),
+            state(3, 1, 8, " ", "primary_focus"),
+        ],
+        [domain(1, "Work", 1)],
+        current=(2026, 3),
+    )
+
+    focus_by_week = {item["week_id"]: item["focus"] for item in payload["weeks"]}
+    assert focus_by_week[3] == {
+        "domain_id": 1,
+        "name": "Work",
+        "archived": False,
+        "unavailable": False,
+        "name_source": "current_domain",
+    }
+    assert focus_by_week[2] == {
+        "domain_id": 9,
+        "name": "Ghost",
+        "archived": False,
+        "unavailable": True,
+        "name_source": "snapshot",
+    }
+    assert focus_by_week[1] == {
+        "domain_id": 8,
+        "name": "Unavailable Domain",
+        "archived": False,
+        "unavailable": True,
+        "name_source": "fallback",
+    }
+
+
 def test_last_reviewed_range_uses_persisted_reviews_and_reflects_correction() -> None:
     weeks = [week(index, index * 2, 2) for index in range(1, 14)]
     states = []

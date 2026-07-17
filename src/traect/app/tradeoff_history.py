@@ -7,8 +7,8 @@ from typing import Any, cast
 from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
-from traect.app.history import load_history_rows
-from traect.app.weekly_audit import WeeklyIssueCode
+from traect.app.history import load_history_rows, resolve_domain_identity
+from traect.app.issue_codes import WeeklyIssueCode
 
 VALID_ATTENTIONS = {"primary_focus", "maintained", "paused"}
 
@@ -197,15 +197,8 @@ def _domain_reference(
     domains_by_id: Mapping[int, Mapping[str, Any]],
 ) -> dict[str, Any]:
     domain_id = int(state["domain_id"])
-    metadata = domains_by_id.get(domain_id)
-    historical_name = str(state.get("domain_name", "")).strip()
-    name = historical_name or (str(metadata["name"]) if metadata is not None else "Unavailable Domain")
-    return {
-        "domain_id": domain_id,
-        "name": name,
-        "archived": metadata is not None and metadata["archived_at"] is not None,
-        "unavailable": metadata is None,
-    }
+    identity = resolve_domain_identity(domains_by_id.get(domain_id), state.get("domain_name"))
+    return {"domain_id": domain_id, **identity}
 
 
 def _week_reference(week: Mapping[str, Any], current_iso_week: tuple[int, int]) -> dict[str, Any]:

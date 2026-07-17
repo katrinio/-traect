@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from traect.app.history import load_history_rows, parse_reviewed_week_range
-from traect.app.weekly_audit import WeeklyIssueCode
+from traect.app.history import load_history_rows, parse_reviewed_week_range, resolve_domain_identity
+from traect.app.issue_codes import WeeklyIssueCode
 
 parse_focus_history_range = parse_reviewed_week_range
 
@@ -96,14 +96,16 @@ class FocusHistoryService:
             focus = None
             if focus_state is not None:
                 domain_id = int(focus_state["domain_id"])
-                domain = domains_by_id.get(domain_id)
-                unavailable = domain is None
-                name = "Unavailable Domain" if unavailable else str(focus_state["domain_name"]).strip()
-                if not name:
-                    name = "Unavailable Domain"
-                    unavailable = True
-                focus = {"domain_id": domain_id, "name": name, "unavailable": unavailable}
-                focus_events[domain_id].append({**week_reference, "name": name})
+                identity = resolve_domain_identity(domains_by_id.get(domain_id), focus_state["domain_name"])
+                focus = {
+                    "domain_id": domain_id,
+                    "name": identity["name"],
+                    "unavailable": identity["unavailable"],
+                    "name_source": identity["name_source"],
+                }
+                focus_events[domain_id].append(
+                    {**week_reference, "name": identity["name"], "name_source": identity["name_source"]}
+                )
             sequence.append({**week_reference, "focus": focus})
 
         reviewed_week_count = len(selected)
@@ -116,6 +118,7 @@ class FocusHistoryService:
                 {
                     "domain_id": domain_id,
                     "name": latest["name"],
+                    "name_source": latest["name_source"],
                     "archived": domain is not None and domain["archived_at"] is not None,
                     "unavailable": domain is None,
                     "focus_count": len(events),

@@ -8,9 +8,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
-from traect.app.history import load_history_rows
+from traect.app.history import load_history_rows, resolve_domain_identity
+from traect.app.issue_codes import WeeklyIssueCode
 from traect.app.paused_streaks import calculate_paused_streaks
-from traect.app.weekly_audit import WeeklyIssueCode
 
 CONDITION_LABELS = {"stable": "Stable", "at_risk": "At risk", "critical": "Critical"}
 
@@ -92,14 +92,14 @@ class ConditionHistoryService:
             if not is_active and not valid_states:
                 continue
             latest = valid_states[0] if valid_states else None
-            unavailable = metadata is None
-            name = _domain_name(metadata, latest[1] if latest else None)
+            identity = resolve_domain_identity(metadata, latest[1]["domain_name"] if latest else None)
             domain_index.append(
                 {
                     "domain_id": candidate_id,
-                    "name": name,
-                    "archived": metadata is not None and metadata["archived_at"] is not None,
-                    "unavailable": unavailable,
+                    "name": identity["name"],
+                    "name_source": identity["name_source"],
+                    "archived": identity["archived"],
+                    "unavailable": identity["unavailable"],
                     "recorded_state_count": len(valid_states),
                     "latest_record": _latest_record(latest, current_iso_week),
                     "sort_order": int(metadata["sort_order"]) if metadata is not None else 2**31,
@@ -185,13 +185,6 @@ def _classify_attention_states(states: Sequence[Any]) -> dict[str, Any]:
             "reason": WeeklyIssueCode.INVALID_ATTENTION.value,
         }
     return {"presence": "recorded", "attention": attention, "reason": None}
-
-
-def _domain_name(metadata: Mapping[str, Any] | None, state: Mapping[str, Any] | None) -> str:
-    if metadata is None:
-        return "Unavailable Domain"
-    historical_name = str(state["domain_name"]).strip() if state is not None else ""
-    return historical_name or str(metadata["name"])
 
 
 def _latest_record(
