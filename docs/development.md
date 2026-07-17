@@ -1,14 +1,14 @@
 # Development
 
-Use Poetry for local work.
+Для локальной работы используйте Poetry.
 
-## Setup
+## Настройка
 
 ```bash
 poetry install
 ```
 
-## Checks
+## Проверки
 
 ```bash
 poetry run ruff check .
@@ -16,7 +16,7 @@ poetry run mypy src
 poetry run pytest tests --cov=src
 ```
 
-## Scope
+## Область
 
-The first implementation focuses on the domain layer and database schema.
-UI work should stay separate from model and migration changes.
+Текущая реализация сфокусирована на domain layer и схеме базы данных.
+Работу над UI следует держать отдельно от изменений модели и миграций.

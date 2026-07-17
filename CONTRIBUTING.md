@@ -1,15 +1,15 @@
 # Contributing
 
-This repository is a template. The same workflow applies to projects started from it.
+Этот репозиторий — шаблон. Тот же workflow применяется к проектам, созданным на его основе.
 
-## Setup
+## Настройка
 
 ```bash
 poetry install
 poetry run pre-commit install
 ```
 
-## Before a PR
+## Перед PR
 
 ```bash
 poetry run ruff check .
@@ -17,15 +17,15 @@ poetry run mypy src
 poetry run pytest tests --cov=src
 ```
 
-These checks run in CI on every pull request.
+Эти проверки запускаются в CI при каждом pull request.
 
-## Style
+## Стиль
 
-- Keep business logic in `src/`, not in scripts.
-- Add type hints to new code. `mypy` runs in strict mode.
-- Add tests for new modules and non-trivial logic.
+- Бизнес-логику держите в `src/`, а не в скриптах.
+- Добавляйте type hints к новому коду. `mypy` работает в strict mode.
+- Добавляйте тесты для новых модулей и нетривиальной логики.
 
 ## PR
 
-- Keep the change small and focused.
-- Commit messages on `main` drive the release version. Use [conventional commits](https://www.conventionalcommits.org/): `fix:`, `feat:`, or `feat!:` for breaking changes. See [README.md](README.md#versioning).
+- Делайте изменение небольшим и сфокусированным.
+- Коммит-сообщения в `main` определяют версию релиза. Используйте [conventional commits](https://www.conventionalcommits.org/): `fix:`, `feat:` или `feat!:` для breaking changes. См. [README.md](README.md#versioning).
