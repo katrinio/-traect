@@ -59,6 +59,7 @@ class Domain(Base):
     workspace_id: Mapped[int] = mapped_column(ForeignKey("workspace.id", ondelete="CASCADE"), index=True, init=False)
     name: Mapped[str] = mapped_column(String(120))
     sort_order: Mapped[int] = mapped_column(Integer)
+    minimum_acceptable_level: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -141,7 +142,8 @@ class WeekDomainState(Base):
             values_callable=_enum_values,
         )
     )
-    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    minimum_acceptable_level_snapshot: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), init=False, server_default=func.now(), onupdate=func.now()

@@ -45,6 +45,14 @@ export function collectReviewPayload(domains) {
 
 function renderEditRow(domain, currentState) {
   const comment = currentState?.comment || "";
+  const minimumAcceptableLevel = domain.minimum_acceptable_level;
+  const minimumContextId = `minimum-level-context-${domain.id}`;
+  const minimumContext = minimumAcceptableLevel ? `
+    <span class="minimum-level-context" id="${minimumContextId}">
+      <span class="minimum-level-label">Minimum acceptable level</span>
+      <span class="minimum-level-value">${escapeHtml(minimumAcceptableLevel)}</span>
+    </span>
+  ` : "";
   const row = document.createElement("section");
   row.className = "domain";
   row.innerHTML = `
@@ -58,7 +66,8 @@ function renderEditRow(domain, currentState) {
         </select>
       </label>
       <label>Condition now
-        <select name="condition_${domain.id}">
+        ${minimumContext}
+        <select name="condition_${domain.id}" ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
           ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>

@@ -150,6 +150,15 @@ def tradeoff_value(page: Page, field: str) -> Locator:
     return page.locator(f"[data-tradeoff-field='{field}'] dd")
 
 
+def set_minimum_acceptable_level(base_url: str, domain_id: int, value: str | None) -> dict[str, Any]:
+    return request_json(
+        base_url,
+        "PATCH",
+        f"/domains/{domain_id}",
+        {"minimum_acceptable_level": value},
+    )
+
+
 @pytest.mark.browser
 def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
     page_errors: list[str] = []
@@ -180,6 +189,67 @@ def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
     expect(current_groups.get_by_role("heading", name="Primary focus")).to_be_visible()
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Timeline")).to_be_visible()
+    assert page_errors == []
+
+
+@pytest.mark.browser
+def test_domain_minimum_level_can_be_saved_and_cleared(page: Page, live_app: LiveApp) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Health"])
+    page.goto(live_app)
+    page.get_by_role("button", name="Domains").click()
+
+    minimum = page.get_by_role("textbox", name="Minimum acceptable level")
+    minimum.fill("  Essential care remains manageable.\nAppointments stay visible.  ")
+    minimum.press("Tab")
+
+    expect(minimum).to_have_value("Essential care remains manageable.\nAppointments stay visible.")
+    saved = request_json(live_app, "GET", f"/workspaces/{workspace_id}/domains")["items"][0]
+    assert saved["minimum_acceptable_level"] == "Essential care remains manageable.\nAppointments stay visible."
+
+    minimum.fill("")
+    minimum.press("Tab")
+    expect(minimum).to_have_value("")
+    cleared = request_json(live_app, "GET", f"/workspaces/{workspace_id}/domains")["items"][0]
+    assert cleared["id"] == domains["Health"]
+    assert cleared["minimum_acceptable_level"] is None
+
+
+@pytest.mark.browser
+def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, live_app: LiveApp) -> None:
+    _, domains = seed_workspace(live_app, ["Health", "Work"])
+    set_minimum_acceptable_level(live_app, domains["Health"], "Keep essential care manageable.")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Start review").click()
+
+    health = page.locator("#review-domains .domain").filter(has_text="Health")
+    work = page.locator("#review-domains .domain").filter(has_text="Work")
+    expect(health.get_by_text("Minimum acceptable level", exact=True)).to_be_visible()
+    expect(health.get_by_text("Keep essential care manageable.", exact=True)).to_be_visible()
+    expect(health.get_by_role("combobox", name="Condition now")).to_have_attribute(
+        "aria-describedby",
+        f"minimum-level-context-{domains['Health']}",
+    )
+    expect(work.locator(".minimum-level-context")).to_have_count(0)
+    expect(page.locator("#current-view .minimum-level-context")).to_have_count(0)
+
+
+@pytest.mark.browser
+def test_minimum_level_renders_multiline_html_like_text_safely_on_mobile(page: Page, live_app: LiveApp) -> None:
+    page_errors: list[str] = []
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    _, domains = seed_workspace(live_app, ["Home"])
+    value = "<img src=x onerror=alert(1)>\n" + "A usable fallback state " * 16
+    set_minimum_acceptable_level(live_app, domains["Home"], value)
+
+    page.set_viewport_size({"width": 360, "height": 760})
+    page.goto(live_app)
+    page.get_by_role("button", name="Start review").click()
+
+    context = page.locator(".minimum-level-context")
+    expect(context).to_contain_text("<img src=x onerror=alert(1)>")
+    expect(context.locator("img")).to_have_count(0)
+    assert context.evaluate("element => element.scrollWidth <= element.clientWidth")
     assert page_errors == []
 
 

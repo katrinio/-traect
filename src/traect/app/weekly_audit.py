@@ -904,7 +904,14 @@ def _week_signature(schema: _Schema, week: RowMapping, states: list[RowMapping])
 
 
 def _state_signature(state: RowMapping, schema: _Schema) -> tuple[Any, ...]:
-    fields = ("domain_id", "domain_name", schema.attention_column, schema.condition_column, "comment")
+    fields = (
+        "domain_id",
+        "domain_name",
+        schema.attention_column,
+        schema.condition_column,
+        "minimum_acceptable_level_snapshot",
+        "comment",
+    )
     return tuple(state.get(name) for name in fields if name is not None and name in schema.state.c)
 
 

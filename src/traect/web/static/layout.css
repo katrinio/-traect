@@ -288,6 +288,38 @@ section {
   min-width: 0;
 }
 
+.domain-config-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.minimum-level-field {
+  grid-column: 2 / -1;
+}
+
+.minimum-level-field textarea {
+  min-height: 5rem;
+}
+
+.minimum-level-context {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-1) 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
+.minimum-level-label {
+  font-weight: 600;
+}
+
+.minimum-level-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .domain {
   display: grid;
   gap: var(--space-3);

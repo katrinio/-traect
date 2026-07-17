@@ -16,6 +16,7 @@ def domain_response(domain: Any) -> dict[str, Any]:
         "workspace_id": domain.workspace_id,
         "name": domain.name,
         "sort_order": domain.sort_order,
+        "minimum_acceptable_level": domain.minimum_acceptable_level,
         "archived_at": domain.archived_at,
     }
 
@@ -23,11 +24,21 @@ def domain_response(domain: Any) -> dict[str, Any]:
 def current_week_context_response(service: TraectService, workspace_id: int) -> dict[str, Any]:
     iso_year, iso_week = service.current_iso_week()
     review = service.get_current_week_optional(workspace_id)
+    review_domains = []
+    for domain in service.list_domains(workspace_id, include_archived=False):
+        review_domains.append(
+            {
+                "domain_id": domain.id,
+                "name": domain.name,
+                "minimum_acceptable_level": domain.minimum_acceptable_level,
+            }
+        )
     return {
         "iso_year": iso_year,
         "iso_week": iso_week,
         "lifecycle": ReviewLifecycle.PROVISIONAL,
         "editable": True,
+        "review_domains": review_domains,
         "review": week_response(review, ReviewLifecycle.PROVISIONAL) if review is not None else None,
     }
 
@@ -58,6 +69,7 @@ def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
                 "domain_name": state.domain_name,
                 "condition": state.condition,
                 "attention": state.attention,
+                "minimum_acceptable_level": state.minimum_acceptable_level_snapshot,
                 "comment": state.comment,
             }
             for state in week.domain_states
