@@ -1,4 +1,4 @@
-import { setStatus } from "/js/presentation.js";
+import { createTimelineWeekLink, formatPercentage, formatWeekLabel, setStatus } from "/js/presentation.js";
 
 export function mapFocusHistory(payload) {
   if (!payload || !payload.summary || !Array.isArray(payload.domains) || !Array.isArray(payload.weeks)) {
@@ -138,7 +138,7 @@ function renderDomainHistory(domain, reviewedWeekCount) {
 
   const recent = document.createElement("span");
   recent.className = "focus-domain-recent";
-  recent.textContent = `Most recent: Week ${domain.most_recent_focus.iso_week}, ${domain.most_recent_focus.iso_year}`;
+  recent.textContent = `Most recent: ${formatWeekLabel(domain.most_recent_focus)}`;
   summary.append(header, chart, recent);
 
   const detail = document.createElement("div");
@@ -189,20 +189,11 @@ function renderSequence(weeks) {
 
 function renderWeekLinkItem(week, includeFocus = false) {
   const item = document.createElement("li");
-  const link = document.createElement("a");
-  link.href = `#timeline-week-${week.week_id}`;
   const lifecycle = week.lifecycle === "provisional" ? " · Provisional" : "";
   const focus = includeFocus ? ` · ${week.focus?.name || "No Primary focus"}` : "";
-  link.textContent = `Week ${week.iso_week}, ${week.iso_year}${focus}${lifecycle}`;
-  link.setAttribute("aria-label", `Open saved review for Week ${week.iso_week}, ${week.iso_year}`);
-  link.addEventListener("click", () => {
-    const target = document.getElementById(`timeline-week-${week.week_id}`);
-    if (target instanceof HTMLDetailsElement) target.open = true;
-  });
-  item.appendChild(link);
+  item.appendChild(createTimelineWeekLink(week, {
+    text: `${formatWeekLabel(week)}${focus}${lifecycle}`,
+    ariaLabel: `Open saved review for ${formatWeekLabel(week)}`,
+  }));
   return item;
-}
-
-function formatPercentage(share) {
-  return `${Math.round(Number(share) * 100)}%`;
 }

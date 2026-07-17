@@ -1,4 +1,4 @@
-import { setStatus } from "/js/presentation.js";
+import { createTimelineWeekLink, formatPercentage, formatWeekLabel, setStatus } from "/js/presentation.js";
 
 export function mapTradeoffHistory(payload) {
   if (!payload || !payload.summary || !payload.range || !payload.integrity) {
@@ -120,7 +120,7 @@ function renderSacrificeRanking(sacrifices, denominator) {
     metric.textContent = `${domain.count} of ${denominator} recorded trade-offs · ${formatPercentage(domain.share_of_pairs)}`;
     const recent = document.createElement("span");
     recent.className = "hint";
-    recent.textContent = `Most recent: Week ${domain.most_recent.iso_week}, ${domain.most_recent.iso_year}`;
+    recent.textContent = `Most recent: ${formatWeekLabel(domain.most_recent)}`;
     item.append(name, metric, recent);
     list.appendChild(item);
   }
@@ -166,7 +166,7 @@ function renderPair(pair, denominator) {
   const detail = document.createElement("div");
   detail.className = "tradeoff-pair-detail";
   const recent = document.createElement("p");
-  recent.textContent = `Most recent record: Week ${pair.most_recent.iso_week}, ${pair.most_recent.iso_year}.`;
+  recent.textContent = `Most recent record: ${formatWeekLabel(pair.most_recent)}.`;
   const weeks = document.createElement("ul");
   for (const week of pair.weeks) weeks.appendChild(renderWeekLink(week, "Open trade-off review"));
   detail.append(recent, weeks);
@@ -240,16 +240,11 @@ function renderChronology(weeks) {
 
 function renderWeekLink(week, ariaPrefix, label = "") {
   const item = document.createElement("li");
-  const link = document.createElement("a");
-  link.href = `#timeline-week-${week.week_id}`;
-  link.setAttribute("aria-label", `${ariaPrefix} for Week ${week.iso_week}, ${week.iso_year}`);
   const lifecycle = week.lifecycle === "provisional" ? " · Provisional" : "";
-  link.textContent = `Week ${week.iso_week}, ${week.iso_year}${label ? ` · ${label}` : ""}${lifecycle}`;
-  link.addEventListener("click", () => {
-    const target = document.getElementById(`timeline-week-${week.week_id}`);
-    if (target instanceof HTMLDetailsElement) target.open = true;
-  });
-  item.appendChild(link);
+  item.appendChild(createTimelineWeekLink(week, {
+    text: `${formatWeekLabel(week)}${label ? ` · ${label}` : ""}${lifecycle}`,
+    ariaLabel: `${ariaPrefix} for ${formatWeekLabel(week)}`,
+  }));
   return item;
 }
 
@@ -290,8 +285,4 @@ function appendDomainStatus(element, domain) {
   status.className = "tradeoff-domain-status";
   status.textContent = ` · ${statuses.join(" · ")}`;
   element.appendChild(status);
-}
-
-function formatPercentage(share) {
-  return `${Math.round(Number(share) * 100)}%`;
 }

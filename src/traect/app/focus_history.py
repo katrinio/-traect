@@ -6,7 +6,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from traect.app.history import load_history_rows, parse_reviewed_week_range, resolve_domain_identity
+from traect.app.history import (
+    CANONICAL_ATTENTION_VALUES,
+    load_history_rows,
+    parse_reviewed_week_range,
+    resolve_domain_identity,
+    review_lifecycle,
+)
 from traect.app.issue_codes import WeeklyIssueCode
 
 parse_focus_history_range = parse_reviewed_week_range
@@ -55,7 +61,6 @@ class FocusHistoryService:
 
         selected: list[tuple[Mapping[str, Any], Mapping[str, Any] | None]] = []
         excluded_reasons: Counter[str] = Counter()
-        valid_attentions = {"primary_focus", "maintained", "paused"}
         for period in sorted(weeks_by_period, reverse=True):
             duplicate_weeks = weeks_by_period[period]
             if len(duplicate_weeks) != 1:
@@ -68,7 +73,7 @@ class FocusHistoryService:
             if len(domain_ids) != len(set(domain_ids)):
                 excluded_reasons[WeeklyIssueCode.DUPLICATE_DOMAIN_STATE.value] += 1
                 continue
-            if any(str(state["attention"]) not in valid_attentions for state in states):
+            if any(str(state["attention"]) not in CANONICAL_ATTENTION_VALUES for state in states):
                 excluded_reasons[WeeklyIssueCode.INVALID_ATTENTION.value] += 1
                 continue
             primary_states = [state for state in states if str(state["attention"]) == "primary_focus"]
@@ -86,12 +91,11 @@ class FocusHistoryService:
         for week, focus_state in selected:
             iso_year = int(week["iso_year"])
             iso_week = int(week["iso_week"])
-            lifecycle = "provisional" if (iso_year, iso_week) == current_iso_week else "final"
             week_reference = {
                 "week_id": int(week["id"]),
                 "iso_year": iso_year,
                 "iso_week": iso_week,
-                "lifecycle": lifecycle,
+                "lifecycle": review_lifecycle(iso_year, iso_week, current_iso_week),
             }
             focus = None
             if focus_state is not None:

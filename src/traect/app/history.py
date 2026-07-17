@@ -13,14 +13,22 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from traect.app.errors import ValidationError
+from traect.domain.enums import DomainAttention
 
 SUPPORTED_REVIEWED_WEEK_RANGES = {12, 26, 52}
+
+# Canonical attention values as plain strings, derived from the enum so the
+# history services never drift from the source of truth. History reads raw
+# rows (see the module docstring), so it compares against string values rather
+# than enum members.
+CANONICAL_ATTENTION_VALUES = frozenset(attention.value for attention in DomainAttention)
 
 
 @dataclass(frozen=True)
@@ -115,3 +123,33 @@ def resolve_domain_identity(
             "name_source": "current_domain",
         }
     return {"name": "Unavailable Domain", "archived": False, "unavailable": True, "name_source": "fallback"}
+
+
+def review_lifecycle(iso_year: int, iso_week: int, current_iso_week: tuple[int, int]) -> str:
+    """Return the lifecycle label for a reviewed week.
+
+    A review is ``"provisional"`` only during its own ISO week and ``"final"``
+    afterwards; the lifecycle is derived, never stored. Returned as a plain
+    string because history rows are serialised directly to JSON.
+    """
+    return "provisional" if (iso_year, iso_week) == current_iso_week else "final"
+
+
+def week_reference(week: Mapping[str, Any]) -> dict[str, int]:
+    """Build a stable ``week_id``/``iso_year``/``iso_week`` reference.
+
+    Input is an already-classified chronological week entry (keyed by
+    ``week_id``), not a raw ``week`` table row (keyed by ``id``).
+    """
+    return {
+        "week_id": int(week["week_id"]),
+        "iso_year": int(week["iso_year"]),
+        "iso_week": int(week["iso_week"]),
+    }
+
+
+def weeks_are_consecutive(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
+    """Return whether two reviewed weeks are adjacent ISO calendar weeks."""
+    first_date = date.fromisocalendar(int(first["iso_year"]), int(first["iso_week"]), 1)
+    second_date = date.fromisocalendar(int(second["iso_year"]), int(second["iso_week"]), 1)
+    return (second_date - first_date).days == 7

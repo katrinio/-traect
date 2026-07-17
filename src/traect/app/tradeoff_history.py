@@ -7,10 +7,13 @@ from typing import Any, cast
 from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
-from traect.app.history import load_history_rows, resolve_domain_identity
+from traect.app.history import (
+    CANONICAL_ATTENTION_VALUES,
+    load_history_rows,
+    resolve_domain_identity,
+    review_lifecycle,
+)
 from traect.app.issue_codes import WeeklyIssueCode
-
-VALID_ATTENTIONS = {"primary_focus", "maintained", "paused"}
 
 
 class TradeoffHistoryService:
@@ -149,7 +152,7 @@ def _extract_week_tradeoff(
     domain_ids = [int(state["domain_id"]) for state in states]
     if len(domain_ids) != len(set(domain_ids)):
         return _excluded_week(reference, WeeklyIssueCode.DUPLICATE_DOMAIN_STATE.value)
-    if any(str(state["attention"]) not in VALID_ATTENTIONS for state in states):
+    if any(str(state["attention"]) not in CANONICAL_ATTENTION_VALUES for state in states):
         return _excluded_week(reference, WeeklyIssueCode.INVALID_ATTENTION.value)
     primary_states = [state for state in states if str(state["attention"]) == "primary_focus"]
     if len(primary_states) > 1:
@@ -208,7 +211,7 @@ def _week_reference(week: Mapping[str, Any], current_iso_week: tuple[int, int]) 
         "week_id": int(week["id"]),
         "iso_year": iso_year,
         "iso_week": iso_week,
-        "lifecycle": "provisional" if (iso_year, iso_week) == current_iso_week else "final",
+        "lifecycle": review_lifecycle(iso_year, iso_week, current_iso_week),
     }
 
 

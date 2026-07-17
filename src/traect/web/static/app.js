@@ -391,6 +391,18 @@ async function saveSetup() {
   window.location.replace("/");
 }
 
+// Drop cached history so the next view recomputes it. Timeline renders only the
+// snapshot names saved with each week, so renaming or archiving a Domain never
+// changes it — only saving a review does (includeTimeline). The history
+// aggregations read current Domain metadata (archived flags, current-name
+// fallback), so every Domain change must invalidate them.
+function invalidateHistoryCaches({ includeTimeline }) {
+  if (includeTimeline) state.timeline = { items: null, loading: false, error: null };
+  state.focusHistory = { ...state.focusHistory, data: null, error: null };
+  state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
+  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
+}
+
 async function saveReview() {
   const payload = collectReviewPayload(activeDomains(state.domains));
   await fetchJSON(
@@ -398,10 +410,7 @@ async function saveReview() {
     { method: "PUT", body: JSON.stringify(payload) },
   );
   await loadState();
-  state.timeline = { items: null, loading: false, error: null };
-  state.focusHistory = { ...state.focusHistory, data: null, error: null };
-  state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
-  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
+  invalidateHistoryCaches({ includeTimeline: true });
   state.activeView = "current";
   render();
 }
@@ -449,8 +458,6 @@ async function createDomainFromManage() {
 
 async function refresh() {
   await loadState();
-  state.focusHistory = { ...state.focusHistory, data: null, error: null };
-  state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
-  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
+  invalidateHistoryCaches({ includeTimeline: false });
   render();
 }

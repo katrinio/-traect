@@ -1,4 +1,4 @@
-import { attentionPresentation, conditionPresentation, escapeHtml, setStatus } from "/js/presentation.js";
+import { attentionPresentation, conditionPresentation, escapeHtml, formatWeekLabel, setStatus } from "/js/presentation.js";
 import { createTradeOffSummary } from "/js/tradeoff.js";
 
 export function mapTimelineHistory(payload) {
@@ -106,7 +106,7 @@ function renderTimelineWeek(review, index, onEdit) {
   heading.setAttribute("role", "heading");
   heading.setAttribute("aria-level", "3");
   heading.textContent = Number.isInteger(review.iso_year) && Number.isInteger(review.iso_week)
-    ? `Week ${review.iso_week}, ${review.iso_year}`
+    ? formatWeekLabel(review)
     : "Unknown week";
   const lifecycle = document.createElement("span");
   lifecycle.className = "timeline-week-lifecycle";
