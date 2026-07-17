@@ -11,24 +11,19 @@ export function renderReview(container, domains, review) {
   if (!container) return;
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   container.replaceChildren(...domains.map((domain) => renderEditRow(domain, statesByDomainId.get(domain.id))));
-  const focusSelect = document.querySelector("select[name='focus_domain_id']");
   const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
-  focusSelect.innerHTML = summaryOptions(domains);
   sacrificedSelect.innerHTML = summaryOptions(domains);
 
   const focusedDomains = domains.filter(
     (domain) => statesByDomainId.get(domain.id)?.attention === "primary_focus",
   );
-  const savedFocusId = domains.some((domain) => domain.id === review?.focus_domain_id) ? review.focus_domain_id : null;
-  const selectedFocusId = savedFocusId || (focusedDomains.length === 1 ? focusedDomains[0].id : null);
-  focusSelect.value = selectedFocusId ? String(selectedFocusId) : "";
+  const primaryFocusId = focusedDomains.length === 1 ? focusedDomains[0].id : null;
   sacrificedSelect.value = review?.sacrificed_domain_id ? String(review.sacrificed_domain_id) : "";
   document.querySelector("input[name='sacrifice_reason']").value = review?.sacrifice_reason || "";
-  synchronizeFocusControls(selectedFocusId);
+  updateTradeOffControls(primaryFocusId);
 
-  focusSelect.onchange = () => synchronizeFocusControls(selectedNumber("focus_domain_id"));
   sacrificedSelect.onchange = () => {
-    if (sacrificedSelect.value === focusSelect.value) sacrificedSelect.value = "";
+    if (sacrificedSelect.value === String(selectedPrimaryFocusId())) sacrificedSelect.value = "";
     synchronizeTradeOffReason();
   };
   document.querySelector("textarea[name='notes']").value = review?.notes || "";
@@ -36,7 +31,6 @@ export function renderReview(container, domains, review) {
 
 export function collectReviewPayload(domains) {
   return {
-    focus_domain_id: selectedNumber("focus_domain_id"),
     sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
     sacrifice_reason: document.querySelector("input[name='sacrifice_reason']").value.trim() || null,
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
@@ -89,34 +83,41 @@ function renderEditRow(domain, currentState) {
   updateCommentContext(commentInput, commentSummary, characterCount);
 
   attentionSelect.addEventListener("change", () => {
-    const focusSelect = document.querySelector("select[name='focus_domain_id']");
     if (attentionSelect.value === "primary_focus") {
-      focusSelect.value = String(domain.id);
-      synchronizeFocusControls(domain.id);
-    } else if (focusSelect.value === String(domain.id)) {
-      focusSelect.value = "";
-      synchronizeFocusControls(null);
+      enforceSinglePrimaryFocus(domain.id);
+    } else {
+      updateTradeOffControls(selectedPrimaryFocusId());
     }
   });
   commentInput.addEventListener("input", () => updateCommentContext(commentInput, commentSummary, characterCount));
   return row;
 }
 
-function synchronizeFocusControls(focusDomainId) {
+function enforceSinglePrimaryFocus(primaryFocusId) {
   document.querySelectorAll("select[name^='attention_']").forEach((select) => {
     const domainId = Number(select.name.replace("attention_", ""));
-    if (domainId === focusDomainId) select.value = "primary_focus";
+    if (domainId === primaryFocusId) select.value = "primary_focus";
     else if (select.value === "primary_focus") select.value = "maintained";
   });
+  updateTradeOffControls(primaryFocusId);
+}
+
+function selectedPrimaryFocusId() {
+  const selected = [...document.querySelectorAll("select[name^='attention_']")]
+    .find((select) => select.value === "primary_focus");
+  return selected ? Number(selected.name.replace("attention_", "")) : null;
+}
+
+function updateTradeOffControls(primaryFocusId) {
   const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
-  sacrificedSelect.disabled = focusDomainId === null;
-  sacrificedSelect.querySelector("option[value='']").textContent = focusDomainId === null
+  sacrificedSelect.disabled = primaryFocusId === null;
+  sacrificedSelect.querySelector("option[value='']").textContent = primaryFocusId === null
     ? "Choose a main focus first"
     : "None this week";
   sacrificedSelect.querySelectorAll("option").forEach((option) => {
-    option.disabled = option.value === String(focusDomainId);
+    option.disabled = option.value === String(primaryFocusId);
   });
-  if (focusDomainId === null || sacrificedSelect.value === String(focusDomainId)) sacrificedSelect.value = "";
+  if (primaryFocusId === null || sacrificedSelect.value === String(primaryFocusId)) sacrificedSelect.value = "";
   synchronizeTradeOffReason();
 }
 

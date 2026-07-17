@@ -33,6 +33,7 @@ def current_week_context_response(service: TraectService, workspace_id: int) -> 
 
 
 def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
+    primary_focus = week.primary_focus_state()
     return {
         "id": week.id,
         "workspace_id": week.workspace_id,
@@ -42,8 +43,11 @@ def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
         "editable": lifecycle == ReviewLifecycle.PROVISIONAL,
         "starts_on": week.starts_on,
         "ends_on": week.ends_on,
-        "focus_domain_id": week.focus_domain_id,
-        "focus_domain_name": week.focus_domain_name,
+        "main_focus": (
+            {"domain_id": primary_focus.domain_id, "name": primary_focus.domain_name}
+            if primary_focus is not None
+            else None
+        ),
         "sacrificed_domain_id": week.sacrificed_domain_id,
         "sacrificed_domain_name": week.sacrificed_domain_name,
         "sacrifice_reason": week.sacrifice_reason,

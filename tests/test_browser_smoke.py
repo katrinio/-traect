@@ -86,6 +86,7 @@ def save_current_review(
     sacrificed: str | None = None,
     reason: str | None = None,
     paused: set[str] | None = None,
+    conditions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     iso_year, iso_week, _ = base_url.clock().date().isocalendar()
     return save_week_review(
@@ -98,6 +99,7 @@ def save_current_review(
         sacrificed=sacrificed,
         reason=reason,
         paused=paused,
+        conditions=conditions,
     )
 
 
@@ -134,7 +136,6 @@ def save_week_review(
             "PUT",
             f"/workspaces/{workspace_id}/weeks/{iso_year}/{iso_week}",
             {
-                "focus_domain_id": domains.get(focus) if focus else None,
                 "sacrificed_domain_id": domains.get(sacrificed) if sacrificed else None,
                 "sacrifice_reason": reason,
                 "notes": None,
@@ -174,13 +175,39 @@ def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
     expect(what_gave_way).to_be_disabled()
     page.locator("select[name^='attention_']").first.select_option("primary_focus")
     expect(what_gave_way).to_be_enabled()
-    page.locator("select[name='focus_domain_id']").select_option(label="Work")
     page.get_by_role("button", name="Save").click()
 
     expect(current_groups.get_by_role("heading", name="Primary focus")).to_be_visible()
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Timeline")).to_be_visible()
     assert page_errors == []
+
+
+@pytest.mark.browser
+def test_edit_review_changes_primary_focus_through_attention_only(page: Page, live_app: LiveApp) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
+    save_current_review(
+        live_app,
+        workspace_id,
+        domains,
+        focus="Work",
+        conditions={"Work": "stable", "Health": "critical"},
+    )
+    page.goto(live_app)
+    page.get_by_role("button", name="Edit review").click()
+
+    expect(page.locator("select[name='focus_domain_id']")).to_have_count(0)
+    page.locator(f"select[name='attention_{domains['Health']}']").select_option("primary_focus")
+    page.get_by_role("button", name="Save").click()
+
+    saved = request_json(live_app, "GET", f"/workspaces/{workspace_id}/weeks/current-context")["review"]
+    states = {state["domain_name"]: state for state in saved["states"]}
+    assert saved["main_focus"] == {"domain_id": domains["Health"], "name": "Health"}
+    assert states["Work"]["attention"] == "maintained"
+    assert states["Work"]["condition"] == "stable"
+    assert states["Health"]["attention"] == "primary_focus"
+    assert states["Health"]["condition"] == "critical"
+    assert "focus_domain_id" not in saved
 
 
 @pytest.mark.browser
@@ -435,8 +462,7 @@ def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: P
                     {
                         "iso_year": 2026,
                         "iso_week": 28,
-                        "focus_domain_id": domains[long_name],
-                        "focus_domain_name": long_name,
+                        "main_focus": {"domain_id": domains[long_name], "name": long_name},
                         "sacrificed_domain_id": None,
                         "sacrificed_domain_name": None,
                         "sacrifice_reason": long_reason,

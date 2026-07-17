@@ -8,7 +8,7 @@ from traect.api.serializers import (
     week_response,
     workspace_response,
 )
-from traect.app.errors import NotFoundError
+from traect.app.errors import NotFoundError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import DomainAttention, DomainCondition
 
@@ -70,6 +70,8 @@ def dispatch(service: TraectService, method: str, path: str, payload: dict[str, 
 
 
 def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, Any]) -> dict[str, Any]:
+    if "focus_domain_id" in payload or "focus_domain_name" in payload:
+        raise ValidationError("Primary focus must be represented by Domain attention")
     states = [
         WeekStateInput(
             domain_id=item["domain_id"],
@@ -83,7 +85,6 @@ def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, An
         int(parts[1]),
         int(parts[3]),
         int(parts[4]),
-        focus_domain_id=payload.get("focus_domain_id"),
         sacrificed_domain_id=payload.get("sacrificed_domain_id"),
         sacrifice_reason=payload.get("sacrifice_reason"),
         notes=payload.get("notes"),

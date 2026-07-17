@@ -120,7 +120,7 @@ Timeline — это хронологический операционный жу
 - заметки недели
 - действие сохранения
 
-`Main focus` синхронизирован с доменом, у которого `attention == primary_focus`. Без `Main focus` нельзя указать `What gave way`, а выбранные domain должны различаться.
+`Main focus` не хранится отдельным полем. Единственный источник истины — `WeekDomainState.attention == primary_focus`; Current, Timeline и API получают Main focus из этого состояния. В неделе может быть ноль или один такой Domain. Без него нельзя указать `What gave way`, а выбранные Domain должны различаться.
 
 ## Единый словарь данных
 

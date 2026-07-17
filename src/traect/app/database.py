@@ -78,11 +78,15 @@ def detect_legacy_revision(connection: Connection) -> str | None:
     index_names = {index["name"] for index in inspector.get_indexes("domain")}
     unique_names = {constraint["name"] for constraint in inspector.get_unique_constraints("domain")}
 
-    is_weekly_schema = {"sort_order", "archived_at"} <= domain_columns and {
-        "focus_domain_id",
-        "sacrificed_domain_id",
-    } <= week_columns
+    is_weekly_schema = {"sort_order", "archived_at"} <= domain_columns and "sacrificed_domain_id" in week_columns
     if is_weekly_schema and "uq_domain_workspace_active_name" in index_names:
+        if (
+            "domain_name" in state_columns
+            and "sacrificed_domain_name" in week_columns
+            and {"attention", "condition"} <= state_columns
+            and {"focus_domain_id", "focus_domain_name"}.isdisjoint(week_columns)
+        ):
+            return "0006_canonical_focus_source"
         if "domain_name" in state_columns and {"focus_domain_name", "sacrificed_domain_name"} <= week_columns:
             if {"attention", "condition"} <= state_columns:
                 return "0005_unify_product_terminology"
