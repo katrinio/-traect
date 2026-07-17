@@ -1,4 +1,4 @@
-import { escapeHtml, modePresentation, setStatus, statusLabels } from "/js/presentation.js";
+import { attentionPresentation, conditionPresentation, escapeHtml, setStatus } from "/js/presentation.js";
 import { createTradeOffSummary } from "/js/tradeoff.js";
 
 export function mapTimelineHistory(payload) {
@@ -15,7 +15,7 @@ export function mapTimelineHistory(payload) {
         issues.push("A Domain state has no historical name.");
         return [];
       }
-      if (!(item.mode in modePresentation) || !(item.status in statusLabels)) {
+      if (!(item.attention in attentionPresentation) || !(item.condition in conditionPresentation)) {
         issues.push(`The saved state for ${item.domain_name} is invalid.`);
         return [];
       }
@@ -121,9 +121,9 @@ function renderTimelineWeek(review, index, onEdit) {
 
   const groups = document.createElement("div");
   groups.className = "timeline-groups";
-  for (const mode of ["focus", "maintain", "ignore"]) {
-    const entries = review.states.filter((item) => item.mode === mode);
-    if (entries.length) groups.appendChild(renderTimelineGroup(mode, entries));
+  for (const attention of ["primary_focus", "maintained", "paused"]) {
+    const entries = review.states.filter((item) => item.attention === attention);
+    if (entries.length) groups.appendChild(renderTimelineGroup(attention, entries));
   }
   content.appendChild(groups);
 
@@ -147,19 +147,19 @@ function renderTimelineWeek(review, index, onEdit) {
 
 function timelineCompactTradeoff(review) {
   if (!review.focus_domain_id && !review.focus_domain_name) return "No primary focus";
-  const focus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
+  const mainFocus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
   const sacrificed = typeof review.sacrificed_domain_name === "string"
     ? review.sacrificed_domain_name
     : "None recorded";
-  return `Focus: ${focus} · Gave way: ${sacrificed}`;
+  return `Main focus: ${mainFocus} · Gave way: ${sacrificed}`;
 }
 
-function renderTimelineGroup(mode, entries) {
+function renderTimelineGroup(attention, entries) {
   const section = document.createElement("section");
   section.className = "timeline-group";
   const heading = document.createElement("h4");
   heading.className = "section-title";
-  heading.textContent = modePresentation[mode].group;
+  heading.textContent = attentionPresentation[attention].group;
   const rows = document.createElement("div");
   rows.className = "timeline-domain-rows";
   rows.replaceChildren(...entries.map(renderTimelineDomainRow));
@@ -168,19 +168,19 @@ function renderTimelineGroup(mode, entries) {
 }
 
 function renderTimelineDomainRow(item) {
-  const attention = modePresentation[item.mode];
-  const [conditionSymbol, conditionLabel] = statusLabels[item.status];
+  const attention = attentionPresentation[item.attention];
+  const condition = conditionPresentation[item.condition];
   const row = document.createElement("div");
   row.className = "timeline-domain-row";
-  row.dataset.mode = item.mode;
-  row.dataset.status = item.status;
+  row.dataset.attention = item.attention;
+  row.dataset.condition = item.condition;
   row.innerHTML = `
     <span class="attention-mark" title="${escapeHtml(attention.label)}" aria-label="Attention: ${escapeHtml(attention.label)}">
       <span aria-hidden="true">${attention.symbol}</span>
     </span>
     <span class="timeline-domain-name">${escapeHtml(item.domain_name)}</span>
-    <span class="status-mark" data-status="${item.status}" title="${escapeHtml(conditionLabel)}" aria-label="Condition: ${escapeHtml(conditionLabel)}">
-      <span class="status-symbol" aria-hidden="true">${conditionSymbol}</span>
+    <span class="condition-mark" data-condition="${item.condition}" title="${escapeHtml(condition.label)}" aria-label="Condition: ${escapeHtml(condition.label)}">
+      <span class="condition-symbol" aria-hidden="true">${condition.symbol}</span>
     </span>
   `;
   return row;

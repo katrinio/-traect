@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from traect.app.errors import ConflictError, NotFoundError, ValidationError
-from traect.domain.enums import ReviewLifecycle, WeekDomainMode, WeekDomainStatus
+from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Domain, Week, WeekDomainState, Workspace
 
 
@@ -21,8 +21,8 @@ def _week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
 @dataclass(frozen=True)
 class WeekStateInput:
     domain_id: int
-    status: WeekDomainStatus
-    mode: WeekDomainMode
+    condition: DomainCondition
+    attention: DomainAttention
     comment: str | None = None
 
 
@@ -166,7 +166,11 @@ class TraectService:
         active_domain_ids = {domain.id for domain in self.list_domains(workspace.id, include_archived=False)}
         if states is None:
             states = [
-                WeekStateInput(domain_id=domain_id, status=WeekDomainStatus.WARNING, mode=WeekDomainMode.MAINTAIN)
+                WeekStateInput(
+                    domain_id=domain_id,
+                    condition=DomainCondition.AT_RISK,
+                    attention=DomainAttention.MAINTAINED,
+                )
                 for domain_id in sorted(active_domain_ids)
             ]
 
@@ -175,9 +179,9 @@ class TraectService:
         if incoming_domain_ids != active_domain_ids or len(states) != len(active_domain_ids):
             raise ValidationError("weekly review must contain one state for each active domain")
 
-        focused_domain_ids = [state.domain_id for state in states if state.mode == WeekDomainMode.FOCUS]
+        focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
         if len(focused_domain_ids) > 1:
-            raise ValidationError("weekly review can contain only one primary focus")
+            raise ValidationError("only one Domain can have Primary focus attention")
         derived_focus_domain_id = focused_domain_ids[0] if focused_domain_ids else None
         if focus_domain_id is not None and focus_domain_id != derived_focus_domain_id:
             raise ValidationError("main focus must match the domain marked as primary focus")
@@ -208,8 +212,8 @@ class TraectService:
             if current is None:
                 state = WeekDomainState(
                     domain_name=domain_name,
-                    status=state_input.status,
-                    mode=state_input.mode,
+                    condition=state_input.condition,
+                    attention=state_input.attention,
                     comment=state_input.comment,
                 )
                 state.week_id = week.id
@@ -217,8 +221,8 @@ class TraectService:
                 week.domain_states.append(state)
             else:
                 current.domain_name = domain_name
-                current.status = state_input.status
-                current.mode = state_input.mode
+                current.condition = state_input.condition
+                current.attention = state_input.attention
                 current.comment = state_input.comment
 
         self.session.flush()

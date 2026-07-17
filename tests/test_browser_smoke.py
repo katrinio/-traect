@@ -85,7 +85,7 @@ def save_current_review(
     focus: str | None = None,
     sacrificed: str | None = None,
     reason: str | None = None,
-    ignored: set[str] | None = None,
+    paused: set[str] | None = None,
 ) -> dict[str, Any]:
     iso_year, iso_week, _ = base_url.clock().date().isocalendar()
     return save_week_review(
@@ -97,7 +97,7 @@ def save_current_review(
         focus=focus,
         sacrificed=sacrificed,
         reason=reason,
-        ignored=ignored,
+        paused=paused,
     )
 
 
@@ -111,16 +111,16 @@ def save_week_review(
     focus: str | None = None,
     sacrificed: str | None = None,
     reason: str | None = None,
-    ignored: set[str] | None = None,
+    paused: set[str] | None = None,
     conditions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    ignored = ignored or set()
+    paused = paused or set()
     conditions = conditions or {}
     states = [
         {
             "domain_id": domain_id,
-            "mode": "focus" if name == focus else ("ignore" if name in ignored else "maintain"),
-            "status": conditions.get(name, "good"),
+            "attention": "primary_focus" if name == focus else ("paused" if name in paused else "maintained"),
+            "condition": conditions.get(name, "stable"),
             "comment": None,
         }
         for name, domain_id in domains.items()
@@ -172,12 +172,12 @@ def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
     expect(page.get_by_text("This review remains provisional until the week ends.", exact=False)).to_be_visible()
     what_gave_way = page.locator("select[name='sacrificed_domain_id']")
     expect(what_gave_way).to_be_disabled()
-    page.locator("select[name^='mode_']").first.select_option("focus")
+    page.locator("select[name^='attention_']").first.select_option("primary_focus")
     expect(what_gave_way).to_be_enabled()
     page.locator("select[name='focus_domain_id']").select_option(label="Work")
     page.get_by_role("button", name="Save").click()
 
-    expect(current_groups.get_by_role("heading", name="Focus")).to_be_visible()
+    expect(current_groups.get_by_role("heading", name="Primary focus")).to_be_visible()
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Timeline")).to_be_visible()
     assert page_errors == []
@@ -248,9 +248,9 @@ def test_current_hides_tradeoff_when_week_has_no_saved_review(page: Page, live_a
 
 
 @pytest.mark.browser
-def test_current_does_not_infer_sacrifice_from_ignored_domain(page: Page, live_app: LiveApp) -> None:
+def test_current_does_not_infer_sacrifice_from_paused_domain(page: Page, live_app: LiveApp) -> None:
     workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
-    save_current_review(live_app, workspace_id, domains, focus="Work", ignored={"Health"})
+    save_current_review(live_app, workspace_id, domains, focus="Work", paused={"Health"})
 
     page.goto(live_app)
 
@@ -385,8 +385,8 @@ def test_timeline_keeps_attention_condition_and_historical_domains_separate(page
         28,
         focus="Work",
         sacrificed="Health",
-        ignored={"Sport"},
-        conditions={"Work": "good", "Health": "warning", "Sport": "critical"},
+        paused={"Sport"},
+        conditions={"Work": "stable", "Health": "at_risk", "Sport": "critical"},
     )
     request_json(live_app, "PATCH", f"/domains/{domains['Work']}", {"name": "Career"})
     request_json(live_app, "POST", f"/domains/{domains['Health']}/archive")
@@ -403,8 +403,8 @@ def test_timeline_keeps_attention_condition_and_historical_domains_separate(page
     expect(week.get_by_text("Rest", exact=True)).to_have_count(0)
     primary_attention = week.locator(".timeline-domain-row").nth(0).locator("[aria-label='Attention: Primary focus']")
     expect(primary_attention).to_be_visible()
-    expect(week.locator("[data-status='warning'][aria-label='Condition: At Risk']")).to_be_visible()
-    expect(week.locator("[data-status='critical'][aria-label='Condition: Critical']")).to_be_visible()
+    expect(week.locator("[data-condition='at_risk'][aria-label='Condition: At risk']")).to_be_visible()
+    expect(week.locator("[data-condition='critical'][aria-label='Condition: Critical']")).to_be_visible()
 
 
 @pytest.mark.browser
@@ -444,10 +444,10 @@ def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: P
                             {
                                 "domain_id": domains[long_name],
                                 "domain_name": long_name,
-                                "mode": "focus",
-                                "status": "good",
+                                "attention": "primary_focus",
+                                "condition": "stable",
                             },
-                            {"domain_id": 999, "mode": "broken", "status": "good"},
+                            {"domain_id": 999, "attention": "broken", "condition": "stable"},
                         ],
                     }
                 ]

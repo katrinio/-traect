@@ -1,4 +1,11 @@
-import { commentLimit, escapeHtml, modeOptions, selectedNumber, summaryOptions } from "/js/presentation.js";
+import {
+  attentionOptions,
+  commentLimit,
+  conditionOptions,
+  escapeHtml,
+  selectedNumber,
+  summaryOptions,
+} from "/js/presentation.js";
 
 export function renderReview(container, domains, review) {
   if (!container) return;
@@ -9,7 +16,9 @@ export function renderReview(container, domains, review) {
   focusSelect.innerHTML = summaryOptions(domains);
   sacrificedSelect.innerHTML = summaryOptions(domains);
 
-  const focusedDomains = domains.filter((domain) => statesByDomainId.get(domain.id)?.mode === "focus");
+  const focusedDomains = domains.filter(
+    (domain) => statesByDomainId.get(domain.id)?.attention === "primary_focus",
+  );
   const savedFocusId = domains.some((domain) => domain.id === review?.focus_domain_id) ? review.focus_domain_id : null;
   const selectedFocusId = savedFocusId || (focusedDomains.length === 1 ? focusedDomains[0].id : null);
   focusSelect.value = selectedFocusId ? String(selectedFocusId) : "";
@@ -33,8 +42,8 @@ export function collectReviewPayload(domains) {
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
     states: domains.map((domain) => ({
       domain_id: domain.id,
-      mode: document.querySelector(`select[name="mode_${domain.id}"]`).value,
-      status: document.querySelector(`select[name="status_${domain.id}"]`).value,
+      attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
+      condition: document.querySelector(`select[name="condition_${domain.id}"]`).value,
       comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
     })),
   };
@@ -50,15 +59,13 @@ function renderEditRow(domain, currentState) {
     </div>
     <div class="domain-grid">
       <label>Attention this week
-        <select name="mode_${domain.id}">
-          ${modeOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+        <select name="attention_${domain.id}">
+          ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <label>Condition now
-        <select name="status_${domain.id}">
-          <option value="good">✓ Stable</option>
-          <option value="warning">⚠ At risk</option>
-          <option value="critical">! Critical</option>
+        <select name="condition_${domain.id}">
+          ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <details class="domain-context full" ${comment ? "open" : ""}>
@@ -71,19 +78,19 @@ function renderEditRow(domain, currentState) {
       </details>
     </div>
   `;
-  const modeSelect = row.querySelector(`select[name="mode_${domain.id}"]`);
+  const attentionSelect = row.querySelector(`select[name="attention_${domain.id}"]`);
   const commentInput = row.querySelector(`textarea[name="comment_${domain.id}"]`);
   const commentSummary = row.querySelector(".domain-context summary");
   const characterCount = row.querySelector(".character-count");
 
-  modeSelect.value = currentState?.mode || "ignore";
-  row.querySelector(`select[name="status_${domain.id}"]`).value = currentState?.status || "good";
+  attentionSelect.value = currentState?.attention || "paused";
+  row.querySelector(`select[name="condition_${domain.id}"]`).value = currentState?.condition || "stable";
   commentInput.value = comment;
   updateCommentContext(commentInput, commentSummary, characterCount);
 
-  modeSelect.addEventListener("change", () => {
+  attentionSelect.addEventListener("change", () => {
     const focusSelect = document.querySelector("select[name='focus_domain_id']");
-    if (modeSelect.value === "focus") {
+    if (attentionSelect.value === "primary_focus") {
       focusSelect.value = String(domain.id);
       synchronizeFocusControls(domain.id);
     } else if (focusSelect.value === String(domain.id)) {
@@ -96,10 +103,10 @@ function renderEditRow(domain, currentState) {
 }
 
 function synchronizeFocusControls(focusDomainId) {
-  document.querySelectorAll("select[name^='mode_']").forEach((select) => {
-    const domainId = Number(select.name.replace("mode_", ""));
-    if (domainId === focusDomainId) select.value = "focus";
-    else if (select.value === "focus") select.value = "maintain";
+  document.querySelectorAll("select[name^='attention_']").forEach((select) => {
+    const domainId = Number(select.name.replace("attention_", ""));
+    if (domainId === focusDomainId) select.value = "primary_focus";
+    else if (select.value === "primary_focus") select.value = "maintained";
   });
   const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
   sacrificedSelect.disabled = focusDomainId === null;

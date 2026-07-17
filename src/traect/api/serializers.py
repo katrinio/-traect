@@ -52,8 +52,8 @@ def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
             {
                 "domain_id": state.domain_id,
                 "domain_name": state.domain_name,
-                "status": state.status,
-                "mode": state.mode,
+                "condition": state.condition,
+                "attention": state.attention,
                 "comment": state.comment,
             }
             for state in week.domain_states

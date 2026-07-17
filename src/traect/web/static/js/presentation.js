@@ -1,15 +1,15 @@
 export const commentLimit = 300;
 
-export const modePresentation = {
-  focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },
-  maintain: { symbol: "✓", label: "Maintained", group: "Maintained" },
-  ignore: { symbol: "○", label: "Paused", group: "Paused" },
+export const attentionPresentation = {
+  primary_focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },
+  maintained: { symbol: "✓", label: "Maintained", group: "Maintained" },
+  paused: { symbol: "○", label: "Paused", group: "Paused" },
 };
 
-export const statusLabels = {
-  good: ["✓", "Stable"],
-  warning: ["⚠", "At Risk"],
-  critical: ["!", "Critical"],
+export const conditionPresentation = {
+  stable: { symbol: "✓", label: "Stable" },
+  at_risk: { symbol: "⚠", label: "At risk" },
+  critical: { symbol: "!", label: "Critical" },
 };
 
 export function activeDomains(domains) {
@@ -24,8 +24,12 @@ export function summaryOptions(domains) {
   return options.join("");
 }
 
-export function modeOptions() {
-  return Object.entries(modePresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
+export function attentionOptions() {
+  return Object.entries(attentionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
+}
+
+export function conditionOptions() {
+  return Object.entries(conditionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
 }
 
 export function selectedNumber(name) {

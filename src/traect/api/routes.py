@@ -10,7 +10,7 @@ from traect.api.serializers import (
 )
 from traect.app.errors import NotFoundError
 from traect.app.service import TraectService, WeekStateInput
-from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.domain.enums import DomainAttention, DomainCondition
 
 
 def dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any]) -> Any:
@@ -73,8 +73,8 @@ def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, An
     states = [
         WeekStateInput(
             domain_id=item["domain_id"],
-            status=WeekDomainStatus(item["status"]),
-            mode=WeekDomainMode(item["mode"]),
+            condition=DomainCondition(item["condition"]),
+            attention=DomainAttention(item["attention"]),
             comment=item.get("comment"),
         )
         for item in payload.get("states", [])

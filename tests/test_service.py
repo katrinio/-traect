@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from tests.support import MutableClock, week_clock
@@ -18,7 +18,8 @@ from traect.api.app import build_app
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
-from traect.domain.enums import ReviewLifecycle, WeekDomainMode, WeekDomainStatus
+from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
+from traect.domain.models import WeekDomainState
 
 
 @pytest.fixture
@@ -31,6 +32,14 @@ def session() -> Iterator[Session]:
             yield session
     finally:
         engine.dispose()
+
+
+def test_canonical_enums_and_model_fields() -> None:
+    assert [value.value for value in DomainAttention] == ["primary_focus", "maintained", "paused"]
+    assert [value.value for value in DomainCondition] == ["stable", "at_risk", "critical"]
+    assert {"attention", "condition"} <= set(WeekDomainState.__table__.columns.keys())
+    assert "mode" not in WeekDomainState.__table__.columns
+    assert "status" not in WeekDomainState.__table__.columns
 
 
 def test_create_and_list_domains(session: Session) -> None:
@@ -102,9 +111,9 @@ def test_rename_domain(session: Session) -> None:
     workspace = service.create_workspace("Life")
     domain = service.create_domain(workspace.id, "Work")
 
-    updated = service.update_domain(domain.id, name="Focus")
+    updated = service.update_domain(domain.id, name="Career")
 
-    assert updated.name == "Focus"
+    assert updated.name == "Career"
 
 
 def test_week_upsert_is_idempotent(session: Session) -> None:
@@ -122,8 +131,8 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
         sacrifice_reason="Release",
         notes="Tight week",
         states=[
-            WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS, "Shipped"),
-            WeekStateInput(health.id, WeekDomainStatus.WARNING, WeekDomainMode.MAINTAIN, "Limited sleep"),
+            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS, "Shipped"),
+            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED, "Limited sleep"),
         ],
     )
     week2 = service.upsert_week(
@@ -135,8 +144,8 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
         sacrifice_reason="Release",
         notes="Tight week",
         states=[
-            WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS, "Shipped"),
-            WeekStateInput(health.id, WeekDomainStatus.WARNING, WeekDomainMode.MAINTAIN, "Limited sleep"),
+            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS, "Shipped"),
+            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED, "Limited sleep"),
         ],
     )
 
@@ -155,8 +164,8 @@ def test_week_derives_a_single_main_focus_from_domain_attention(session: Session
         2026,
         29,
         states=[
-            WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
-            WeekStateInput(health.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN),
+            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+            WeekStateInput(health.id, DomainCondition.STABLE, DomainAttention.MAINTAINED),
         ],
     )
 
@@ -169,14 +178,14 @@ def test_week_rejects_multiple_primary_focus_domains(session: Session) -> None:
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
 
-    with pytest.raises(ValidationError, match="only one primary focus"):
+    with pytest.raises(ValidationError, match="only one Domain can have Primary focus attention"):
         service.upsert_week(
             workspace.id,
             2026,
             29,
             states=[
-                WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
-                WeekStateInput(health.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
+                WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+                WeekStateInput(health.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
             ],
         )
 
@@ -191,7 +200,7 @@ def test_week_rejects_domain_context_over_300_characters(session: Session) -> No
             workspace.id,
             2026,
             29,
-            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN, "x" * 301)],
+            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED, "x" * 301)],
         )
 
 
@@ -206,7 +215,7 @@ def test_week_rejects_what_gave_way_without_a_main_focus(session: Session) -> No
             2026,
             29,
             sacrificed_domain_id=work.id,
-            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)],
+            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
         )
 
 
@@ -221,7 +230,7 @@ def test_week_rejects_trade_off_reason_without_what_gave_way(session: Session) -
             2026,
             29,
             sacrifice_reason="Release",
-            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
         )
 
 
@@ -237,8 +246,8 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
         2026,
         28,
         states=[
-            WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
-            WeekStateInput(health.id, WeekDomainStatus.WARNING, WeekDomainMode.MAINTAIN),
+            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED),
         ],
     )
     service.archive_domain(health.id)
@@ -254,7 +263,7 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
         workspace.id,
         2026,
         29,
-        states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
     )
     assert {state.domain_id for state in next_week.domain_states} == {work.id}
 
@@ -268,7 +277,7 @@ def test_historical_states_remain_available_after_archival(session: Session) -> 
         workspace.id,
         2026,
         28,
-        states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
     )
     service.archive_domain(work.id)
 
@@ -287,7 +296,7 @@ def test_cross_workspace_relationship_validation(session: Session) -> None:
             workspace_b.id,
             2026,
             29,
-            states=[WeekStateInput(domain_a.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+            states=[WeekStateInput(domain_a.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
         )
 
     with pytest.raises(ValidationError):
@@ -382,7 +391,7 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
     try:
         with verification_engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0004_historical_domain_names"
+                "0005_unify_product_terminology"
             )
     finally:
         verification_engine.dispose()
@@ -430,6 +439,116 @@ def test_historical_name_migration_backfills_existing_reviews(tmp_path: Path) ->
     assert state_names == ["Work", "Health"]
 
 
+def test_terminology_migration_preserves_history_and_supports_downgrade(tmp_path: Path) -> None:
+    database = tmp_path / "terminology.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_ROOT))
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0004_historical_domain_names")
+        connection.execute(text("INSERT INTO workspace (id, name) VALUES (1, 'Life')"))
+        connection.execute(
+            text(
+                "INSERT INTO domain (id, workspace_id, name, sort_order, archived_at) VALUES "
+                "(1, 1, 'Work', 0, NULL), (2, 1, 'Health', 1, '2026-07-10'), "
+                "(3, 1, 'Rest', 2, NULL), (4, 1, 'Family', 3, NULL), "
+                "(5, 1, 'Sport', 4, NULL), (6, 1, 'Study', 5, NULL)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO week (id, workspace_id, iso_year, iso_week, starts_on, ends_on) "
+                "VALUES (1, 1, 2026, 28, '2026-07-06', '2026-07-12')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO week_domain_state (week_id, domain_id, domain_name, mode, status) VALUES "
+                "(1, 1, 'Work', 'FOCUS', 'GOOD'), "
+                "(1, 2, 'Health', 'maintain', 'warning'), "
+                "(1, 3, 'Rest', 'IGNORE', 'CRITICAL'), "
+                "(1, 4, 'Family', 'primary_focus', 'stable'), "
+                "(1, 5, 'Sport', 'maintained', 'at_risk'), "
+                "(1, 6, 'Study', 'paused', 'critical')"
+            )
+        )
+        command.upgrade(config, "head")
+
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("week_domain_state")}
+        rows = connection.execute(
+            text("SELECT domain_id, attention, condition FROM week_domain_state WHERE week_id = 1 ORDER BY domain_id")
+        ).all()
+        archived_at = connection.execute(text("SELECT archived_at FROM domain WHERE id = 2")).scalar_one()
+    assert {"attention", "condition"} <= columns
+    assert "mode" not in columns and "status" not in columns
+    assert rows == [
+        (1, "primary_focus", "stable"),
+        (2, "maintained", "at_risk"),
+        (3, "paused", "critical"),
+        (4, "primary_focus", "stable"),
+        (5, "maintained", "at_risk"),
+        (6, "paused", "critical"),
+    ]
+    assert archived_at is not None
+
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0004_historical_domain_names")
+    with engine.connect() as connection:
+        downgraded = connection.execute(
+            text("SELECT domain_id, mode, status FROM week_domain_state WHERE week_id = 1 ORDER BY domain_id")
+        ).all()
+    engine.dispose()
+    assert downgraded == [
+        (1, "focus", "good"),
+        (2, "maintain", "warning"),
+        (3, "ignore", "critical"),
+        (4, "focus", "good"),
+        (5, "maintain", "warning"),
+        (6, "ignore", "critical"),
+    ]
+
+
+def test_terminology_migration_rejects_unknown_values_before_changing_schema(tmp_path: Path) -> None:
+    database = tmp_path / "unknown-terminology.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_ROOT))
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0004_historical_domain_names")
+        connection.execute(text("INSERT INTO workspace (id, name) VALUES (1, 'Life')"))
+        connection.execute(text("INSERT INTO domain (id, workspace_id, name, sort_order) VALUES (1, 1, 'Work', 0)"))
+        connection.execute(
+            text(
+                "INSERT INTO week (id, workspace_id, iso_year, iso_week, starts_on, ends_on) "
+                "VALUES (1, 1, 2026, 28, '2026-07-06', '2026-07-12')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO week_domain_state (week_id, domain_id, domain_name, mode, status) "
+                "VALUES (1, 1, 'Work', 'unexpected', 'good')"
+            )
+        )
+
+    connection = engine.connect()
+    config.attributes["connection"] = connection
+    with pytest.raises(RuntimeError, match="unknown values: 'unexpected'"):
+        command.upgrade(config, "head")
+    connection.close()
+
+    with engine.connect() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("week_domain_state")}
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert {"mode", "status"} <= columns
+    assert "attention" not in columns and "condition" not in columns
+    assert revision == "0004_historical_domain_names"
+
+
 @pytest.mark.parametrize(
     ("body", "expected_error"),
     [
@@ -458,6 +577,59 @@ def test_invalid_week_values_return_json_error(tmp_path: Path) -> None:
     assert "error" in response["body"]
 
 
+@pytest.mark.parametrize(
+    ("attention", "condition"),
+    [
+        ("primary_focus", "stable"),
+        ("maintained", "at_risk"),
+        ("paused", "critical"),
+    ],
+)
+def test_canonical_week_state_values_round_trip(tmp_path: Path, attention: str, condition: str) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+    focus = b'"focus_domain_id":1,' if attention == "primary_focus" else b""
+    body = (
+        b"{"
+        + focus
+        + b'"states":[{"domain_id":1,"attention":"'
+        + attention.encode()
+        + b'","condition":"'
+        + condition.encode()
+        + b'"}]}'
+    )
+
+    response = _request(app, "PUT", "/workspaces/1/weeks/2026/29", body=body)
+    payload = json.loads(response["body"])
+    state = payload["states"][0]
+
+    assert response["status"].startswith("200")
+    assert state == {
+        "domain_id": 1,
+        "domain_name": "Work",
+        "attention": attention,
+        "condition": condition,
+        "comment": None,
+    }
+    assert "mode" not in state
+    assert "status" not in state
+
+
+def test_legacy_week_state_fields_are_not_accepted(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+
+    response = _request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/29",
+        body=b'{"states":[{"domain_id":1,"mode":"maintain","status":"good"}]}',
+    )
+
+    assert response["status"].startswith("400")
+    assert "missing required field: condition" in response["body"]
+
+
 def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Session) -> None:
     clock = MutableClock(week_clock(2025, 1))
     service = TraectService(session, clock=clock)
@@ -469,7 +641,7 @@ def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Sessi
             workspace.id,
             iso_year,
             iso_week,
-            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)],
+            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
         )
 
     history = service.list_weeks(workspace.id)
@@ -489,8 +661,8 @@ def test_history_api_preserves_saved_domain_names_and_membership(tmp_path: Path)
         "/workspaces/1/weeks/2026/28",
         body=(
             b'{"focus_domain_id":1,"sacrificed_domain_id":2,"sacrifice_reason":"Release",'
-            b'"states":[{"domain_id":1,"mode":"focus","status":"good"},'
-            b'{"domain_id":2,"mode":"ignore","status":"warning"}]}'
+            b'"states":[{"domain_id":1,"attention":"primary_focus","condition":"stable"},'
+            b'{"domain_id":2,"attention":"paused","condition":"at_risk"}]}'
         ),
     )
     assert saved["status"].startswith("200")
@@ -534,7 +706,7 @@ def test_provisional_review_updates_idempotently_then_becomes_final(session: Ses
     service = TraectService(session, clock=clock)
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
-    states = [WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)]
+    states = [WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)]
 
     first = service.upsert_week(workspace.id, 2026, 29, notes="First", states=states)
     second = service.upsert_week(workspace.id, 2026, 29, notes="Updated", states=states)
@@ -571,7 +743,7 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
         app,
         "PUT",
         "/workspaces/1/weeks/2026/29",
-        body=(b'{"lifecycle":"final","states":[{"domain_id":1,"mode":"maintain","status":"good"}]}'),
+        body=(b'{"lifecycle":"final","states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}'),
     )
     provisional = json.loads(created["body"])
     assert provisional["lifecycle"] == "provisional"
@@ -586,7 +758,7 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
         app,
         "PUT",
         "/workspaces/1/weeks/2026/29",
-        body=b'{"states":[{"domain_id":1,"mode":"maintain","status":"good"}]}',
+        body=b'{"states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}',
     )
     assert rejected["status"].startswith("409")
     assert "final and can no longer be edited" in rejected["body"]
@@ -625,7 +797,7 @@ def test_viewing_lifecycle_does_not_mutate_review(session: Session) -> None:
         workspace.id,
         2026,
         29,
-        states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)],
+        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
     )
     original_updated_at = week.updated_at
 

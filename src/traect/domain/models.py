@@ -18,7 +18,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from traect.db.base import Base
-from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.domain.enums import DomainAttention, DomainCondition
+
+
+def _enum_values(enum_class: type[DomainAttention] | type[DomainCondition]) -> list[str]:
+    return [member.value for member in enum_class]
 
 
 class Workspace(Base):
@@ -108,10 +112,22 @@ class WeekDomainState(Base):
     week_id: Mapped[int] = mapped_column(ForeignKey("week.id", ondelete="CASCADE"), index=True, init=False)
     domain_id: Mapped[int] = mapped_column(ForeignKey("domain.id", ondelete="CASCADE"), index=True, init=False)
     domain_name: Mapped[str] = mapped_column(String(120))
-    status: Mapped[WeekDomainStatus] = mapped_column(
-        Enum(WeekDomainStatus, name="week_domain_status", native_enum=False)
+    condition: Mapped[DomainCondition] = mapped_column(
+        Enum(
+            DomainCondition,
+            name="domain_condition",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
     )
-    mode: Mapped[WeekDomainMode] = mapped_column(Enum(WeekDomainMode, name="week_domain_mode", native_enum=False))
+    attention: Mapped[DomainAttention] = mapped_column(
+        Enum(
+            DomainAttention,
+            name="domain_attention",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
+    )
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

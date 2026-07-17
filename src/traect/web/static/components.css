@@ -172,28 +172,24 @@ button:focus {
   min-height: 1.25rem;
 }
 
-.status-mark {
+.condition-mark {
   display: inline-flex;
   align-items: baseline;
   font-weight: 600;
 }
 
-.status-symbol {
+.condition-symbol {
   color: var(--text-muted);
 }
 
-.status-mark[data-status="good"] .status-symbol {
-  color: var(--maintain-green);
+.condition-mark[data-condition="stable"] .condition-symbol {
+  color: var(--stable-green);
 }
 
-.status-mark[data-status="warning"] .status-symbol {
+.condition-mark[data-condition="at_risk"] .condition-symbol {
   color: var(--risk-amber);
 }
 
-.status-mark[data-status="critical"] .status-symbol {
+.condition-mark[data-condition="critical"] .condition-symbol {
   color: var(--critical);
-}
-
-.status-mark[data-status="inactive"] .status-symbol {
-  color: var(--inactive-gray);
 }

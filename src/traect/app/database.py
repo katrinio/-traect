@@ -84,6 +84,8 @@ def detect_legacy_revision(connection: Connection) -> str | None:
     } <= week_columns
     if is_weekly_schema and "uq_domain_workspace_active_name" in index_names:
         if "domain_name" in state_columns and {"focus_domain_name", "sacrificed_domain_name"} <= week_columns:
+            if {"attention", "condition"} <= state_columns:
+                return "0005_unify_product_terminology"
             return "0004_historical_domain_names"
         if "uq_domain_workspace_name" in unique_names:
             return "0002_weekly_workflow"
