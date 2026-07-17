@@ -79,10 +79,6 @@ class Week(Base):
     iso_week: Mapped[int] = mapped_column(Integer)
     starts_on: Mapped[date] = mapped_column(Date)
     ends_on: Mapped[date] = mapped_column(Date)
-    focus_domain_id: Mapped[int | None] = mapped_column(
-        ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
-    )
-    focus_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
     sacrificed_domain_id: Mapped[int | None] = mapped_column(
         ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
     )
@@ -98,15 +94,29 @@ class Week(Base):
     domain_states: Mapped[list[WeekDomainState]] = relationship(
         back_populates="week", cascade="all, delete-orphan", default_factory=list, order_by="WeekDomainState.id"
     )
-    focus_domain: Mapped[Domain | None] = relationship(foreign_keys=[focus_domain_id], init=False, post_update=True)
     sacrificed_domain: Mapped[Domain | None] = relationship(
         foreign_keys=[sacrificed_domain_id], init=False, post_update=True
     )
 
+    def primary_focus_state(self) -> WeekDomainState | None:
+        matches = [state for state in self.domain_states if state.attention == DomainAttention.PRIMARY_FOCUS]
+        if len(matches) > 1:
+            raise ValueError("week contains more than one Domain with Primary focus attention")
+        return matches[0] if matches else None
+
 
 class WeekDomainState(Base):
     __tablename__ = "week_domain_state"
-    __table_args__ = (UniqueConstraint("week_id", "domain_id", name="uq_week_domain_state_week_domain"),)
+    __table_args__ = (
+        UniqueConstraint("week_id", "domain_id", name="uq_week_domain_state_week_domain"),
+        Index(
+            "uq_week_domain_state_primary_focus",
+            "week_id",
+            unique=True,
+            sqlite_where=text("attention = 'primary_focus'"),
+            postgresql_where=text("attention = 'primary_focus'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, init=False)
     week_id: Mapped[int] = mapped_column(ForeignKey("week.id", ondelete="CASCADE"), index=True, init=False)

@@ -21,7 +21,13 @@ export function mapTimelineHistory(payload) {
       }
       return [{ ...item, domain_name: item.domain_name.trim() }];
     });
-    if (review.focus_domain_id && !review.focus_domain_name) issues.push("The saved Main focus name is missing.");
+    let mainFocus = review.main_focus;
+    if (mainFocus !== null && (
+      !mainFocus || !Number.isInteger(mainFocus.domain_id) || typeof mainFocus.name !== "string" || !mainFocus.name.trim()
+    )) {
+      issues.push("The saved Main focus is invalid.");
+      mainFocus = null;
+    }
     if (review.sacrificed_domain_id && !review.sacrificed_domain_name) {
       issues.push("The saved What gave way name is missing.");
     }
@@ -35,7 +41,7 @@ export function mapTimelineHistory(payload) {
       lifecycle = "final";
     }
     const editable = lifecycle === "provisional" && review.editable === true;
-    return { ...review, lifecycle, editable, states, issues };
+    return { ...review, main_focus: mainFocus, lifecycle, editable, states, issues };
   });
 }
 
@@ -114,7 +120,7 @@ function renderTimelineWeek(review, index, onEdit) {
   const tradeoff = document.createElement("div");
   tradeoff.className = "timeline-tradeoff";
   tradeoff.appendChild(createTradeOffSummary(review, {
-    focusName: typeof review.focus_domain_name === "string" ? review.focus_domain_name : null,
+    focusName: review.main_focus?.name || null,
     sacrificedName: typeof review.sacrificed_domain_name === "string" ? review.sacrificed_domain_name : null,
   }));
   content.appendChild(tradeoff);
@@ -146,8 +152,8 @@ function renderTimelineWeek(review, index, onEdit) {
 }
 
 function timelineCompactTradeoff(review) {
-  if (!review.focus_domain_id && !review.focus_domain_name) return "No primary focus";
-  const mainFocus = typeof review.focus_domain_name === "string" ? review.focus_domain_name : "Unknown domain";
+  if (!review.main_focus) return "No primary focus";
+  const mainFocus = review.main_focus.name;
   const sacrificed = typeof review.sacrificed_domain_name === "string"
     ? review.sacrificed_domain_name
     : "None recorded";

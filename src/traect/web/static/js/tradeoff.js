@@ -9,15 +9,14 @@ export function renderCurrentTradeOff(section, content, domains, review) {
   const domainsById = new Map(domains.map((domain) => [domain.id, domain]));
   section.classList.remove("hidden");
   content.replaceChildren(createTradeOffSummary(review, {
-    focusName: review.focus_domain_name
-      || (review.focus_domain_id ? domainName(domainsById, review.focus_domain_id) : null),
+    focusName: review.main_focus?.name || null,
     sacrificedName: review.sacrificed_domain_name
       || (review.sacrificed_domain_id ? domainName(domainsById, review.sacrificed_domain_id) : null),
   }));
 }
 
 export function createTradeOffSummary(review, names) {
-  if (!review.focus_domain_id && !names.focusName) {
+  if (!review.main_focus && !names.focusName) {
     const empty = document.createElement("p");
     empty.className = "tradeoff-empty";
     empty.textContent = "No primary focus recorded.";
