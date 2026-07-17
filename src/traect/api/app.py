@@ -194,12 +194,15 @@ def _week(week: Any) -> dict[str, Any]:
         "starts_on": week.starts_on,
         "ends_on": week.ends_on,
         "focus_domain_id": week.focus_domain_id,
+        "focus_domain_name": week.focus_domain_name,
         "sacrificed_domain_id": week.sacrificed_domain_id,
+        "sacrificed_domain_name": week.sacrificed_domain_name,
         "sacrifice_reason": week.sacrifice_reason,
         "notes": week.notes,
         "states": [
             {
                 "domain_id": state.domain_id,
+                "domain_name": state.domain_name,
                 "status": state.status,
                 "mode": state.mode,
                 "comment": state.comment,

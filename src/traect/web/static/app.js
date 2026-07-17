@@ -7,6 +7,7 @@ const state = {
   workspace: null,
   domains: [],
   currentReview: null,
+  timeline: { items: null, loading: false, error: null },
   activeView: "current",
   setupDraft: [{ name: "" }],
   setupWorkspaceName: "",
@@ -17,12 +18,15 @@ const el = {
   mainNav: document.getElementById("main-nav"),
   setupView: document.getElementById("setup-view"),
   currentView: document.getElementById("current-view"),
+  timelineView: document.getElementById("timeline-view"),
   editView: document.getElementById("edit-view"),
   manageView: document.getElementById("manage-view"),
   weekMeta: document.getElementById("week-meta"),
   currentTradeoff: document.getElementById("current-tradeoff"),
   currentTradeoffContent: document.getElementById("current-tradeoff-content"),
   currentGroups: document.getElementById("current-groups"),
+  timelineEntries: document.getElementById("timeline-entries"),
+  timelineStatus: document.getElementById("timeline-status"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
   archivedDomains: document.getElementById("archived-domains"),
@@ -36,10 +40,10 @@ const el = {
   backToCurrentButton: document.getElementById("back-to-current"),
 };
 
-const modeLabels = {
-  focus: "▲ Focus",
-  maintain: "✓ Maintenance",
-  ignore: "○ Ignored",
+const modePresentation = {
+  focus: { symbol: "▲", label: "Primary focus", group: "Primary focus" },
+  maintain: { symbol: "✓", label: "Maintained", group: "Maintained" },
+  ignore: { symbol: "○", label: "Paused", group: "Paused" },
 };
 
 const statusLabels = {
@@ -142,6 +146,7 @@ function render() {
   }
 
   renderCurrent();
+  renderTimeline();
   renderEdit();
   renderDomains();
   showOnly(state.activeView);
@@ -164,6 +169,9 @@ function showOnly(view) {
   if (el.currentView) {
     el.currentView.classList.toggle("hidden", view !== "current");
   }
+  if (el.timelineView) {
+    el.timelineView.classList.toggle("hidden", view !== "timeline");
+  }
   if (el.editView) {
     el.editView.classList.toggle("hidden", view !== "edit");
   }
@@ -175,6 +183,9 @@ function showOnly(view) {
 function setActiveView(view) {
   state.activeView = view;
   render();
+  if (view === "timeline" && state.timeline.items === null && !state.timeline.loading) {
+    loadTimeline();
+  }
 }
 
 function renderSetup() {
@@ -252,28 +263,32 @@ function renderCurrentTradeOff(review) {
     return;
   }
 
+  const domainsById = new Map(state.domains.map((domain) => [domain.id, domain]));
   el.currentTradeoff.classList.remove("hidden");
-  if (!review.focus_domain_id) {
+  el.currentTradeoffContent.replaceChildren(createTradeOffSummary(review, {
+    focusName: review.focus_domain_id ? domainName(domainsById, review.focus_domain_id) : null,
+    sacrificedName: review.sacrificed_domain_id ? domainName(domainsById, review.sacrificed_domain_id) : null,
+  }));
+}
+
+function createTradeOffSummary(review, names) {
+  if (!review.focus_domain_id && !names.focusName) {
     const empty = document.createElement("p");
     empty.className = "tradeoff-empty";
     empty.textContent = "No primary focus recorded.";
-    el.currentTradeoffContent.replaceChildren(empty);
-    return;
+    return empty;
   }
 
-  const domainsById = new Map(state.domains.map((domain) => [domain.id, domain]));
   const list = document.createElement("dl");
   list.className = "tradeoff-list";
-  list.appendChild(renderTradeOffRow("focus", "Main focus", domainName(domainsById, review.focus_domain_id)));
+  list.appendChild(renderTradeOffRow("focus", "Main focus", names.focusName || "Unknown domain"));
 
-  const sacrificed = review.sacrificed_domain_id
-    ? domainName(domainsById, review.sacrificed_domain_id)
-    : "None recorded";
+  const sacrificed = names.sacrificedName || "None recorded";
   list.appendChild(renderTradeOffRow("sacrifice", "What gave way", sacrificed));
-  if (review.sacrifice_reason) {
+  if (typeof review.sacrifice_reason === "string" && review.sacrifice_reason) {
     list.appendChild(renderTradeOffRow("reason", "Why", review.sacrifice_reason));
   }
-  el.currentTradeoffContent.replaceChildren(list);
+  return list;
 }
 
 function renderTradeOffRow(field, label, value) {
@@ -316,6 +331,168 @@ function renderCurrentRow(domain, currentState) {
     <span class="domain-name">${escapeHtml(domain.name)}</span>
     <span class="status-mark" data-status="${status}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
       <span class="status-symbol" aria-hidden="true">${symbol}</span>
+    </span>
+  `;
+  return row;
+}
+
+async function loadTimeline() {
+  state.timeline.loading = true;
+  state.timeline.error = null;
+  renderTimeline();
+  try {
+    const payload = await fetchJSON(`/workspaces/${state.workspace.id}/weeks`);
+    state.timeline.items = mapTimelineHistory(payload);
+  } catch (error) {
+    state.timeline.error = error.message || "Timeline could not be loaded.";
+  } finally {
+    state.timeline.loading = false;
+    renderTimeline();
+  }
+}
+
+function mapTimelineHistory(payload) {
+  if (!payload || !Array.isArray(payload.items)) {
+    throw new Error("Timeline response is incomplete.");
+  }
+  return payload.items.map((review) => {
+    const issues = [];
+    if (!Number.isInteger(review.iso_year) || !Number.isInteger(review.iso_week)) {
+      issues.push("Week date is incomplete.");
+    }
+    const rawStates = Array.isArray(review.states) ? review.states : [];
+    if (!Array.isArray(review.states)) {
+      issues.push("Domain states are missing.");
+    }
+    const states = rawStates.flatMap((item) => {
+      if (!item || typeof item.domain_name !== "string" || !item.domain_name.trim()) {
+        issues.push("A Domain state has no historical name.");
+        return [];
+      }
+      if (!(item.mode in modePresentation) || !(item.status in statusLabels)) {
+        issues.push(`The saved state for ${item.domain_name} is invalid.`);
+        return [];
+      }
+      return [{ ...item, domain_name: item.domain_name.trim() }];
+    });
+    if (review.focus_domain_id && !review.focus_domain_name) {
+      issues.push("The saved Main focus name is missing.");
+    }
+    if (review.sacrificed_domain_id && !review.sacrificed_domain_name) {
+      issues.push("The saved What gave way name is missing.");
+    }
+    if (review.sacrifice_reason !== null && review.sacrifice_reason !== undefined
+      && typeof review.sacrifice_reason !== "string") {
+      issues.push("The saved Why value is invalid.");
+    }
+    return { ...review, states, issues };
+  });
+}
+
+function renderTimeline() {
+  if (!el.timelineEntries || !el.timelineStatus) return;
+  if (state.timeline.loading) {
+    setStatus(el.timelineStatus, "Loading timeline…");
+    el.timelineEntries.replaceChildren();
+    return;
+  }
+  if (state.timeline.error) {
+    setStatus(el.timelineStatus, "Timeline could not be loaded. Try again.", true);
+    const retry = document.createElement("button");
+    retry.className = "secondary timeline-retry";
+    retry.type = "button";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", loadTimeline);
+    el.timelineEntries.replaceChildren(retry);
+    return;
+  }
+  setStatus(el.timelineStatus, "");
+  if (state.timeline.items === null) {
+    el.timelineEntries.replaceChildren();
+    return;
+  }
+  if (state.timeline.items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "timeline-empty";
+    const title = document.createElement("p");
+    title.textContent = "No weekly reviews yet.";
+    const explanation = document.createElement("p");
+    explanation.className = "hint";
+    explanation.textContent = "The history will appear here after the first review is saved.";
+    const current = document.createElement("button");
+    current.className = "secondary";
+    current.type = "button";
+    current.textContent = "Back to Current";
+    current.addEventListener("click", () => setActiveView("current"));
+    empty.append(title, explanation, current);
+    el.timelineEntries.replaceChildren(empty);
+    return;
+  }
+  el.timelineEntries.replaceChildren(...state.timeline.items.map(renderTimelineWeek));
+}
+
+function renderTimelineWeek(review) {
+  const article = document.createElement("article");
+  article.className = "timeline-week";
+  const heading = document.createElement("h3");
+  heading.className = "timeline-week-heading";
+  heading.textContent = Number.isInteger(review.iso_year) && Number.isInteger(review.iso_week)
+    ? `Week ${review.iso_week}, ${review.iso_year}`
+    : "Unknown week";
+  article.appendChild(heading);
+
+  const tradeoff = document.createElement("div");
+  tradeoff.className = "timeline-tradeoff";
+  tradeoff.appendChild(createTradeOffSummary(review, {
+    focusName: typeof review.focus_domain_name === "string" ? review.focus_domain_name : null,
+    sacrificedName: typeof review.sacrificed_domain_name === "string" ? review.sacrificed_domain_name : null,
+  }));
+  article.appendChild(tradeoff);
+
+  const groups = document.createElement("div");
+  groups.className = "timeline-groups";
+  for (const mode of ["focus", "maintain", "ignore"]) {
+    const entries = review.states.filter((item) => item.mode === mode);
+    if (entries.length) groups.appendChild(renderTimelineGroup(mode, entries));
+  }
+  article.appendChild(groups);
+
+  if (review.issues.length) {
+    const integrity = document.createElement("p");
+    integrity.className = "status error timeline-integrity";
+    integrity.textContent = `Some saved data could not be shown: ${[...new Set(review.issues)].join(" ")}`;
+    article.appendChild(integrity);
+  }
+  return article;
+}
+
+function renderTimelineGroup(mode, entries) {
+  const section = document.createElement("section");
+  section.className = "timeline-group";
+  const heading = document.createElement("h4");
+  heading.className = "section-title";
+  heading.textContent = modePresentation[mode].group;
+  const rows = document.createElement("div");
+  rows.className = "timeline-domain-rows";
+  rows.replaceChildren(...entries.map(renderTimelineDomainRow));
+  section.append(heading, rows);
+  return section;
+}
+
+function renderTimelineDomainRow(item) {
+  const attention = modePresentation[item.mode];
+  const [conditionSymbol, conditionLabel] = statusLabels[item.status];
+  const row = document.createElement("div");
+  row.className = "timeline-domain-row";
+  row.dataset.mode = item.mode;
+  row.dataset.status = item.status;
+  row.innerHTML = `
+    <span class="attention-mark" title="${escapeHtml(attention.label)}" aria-label="Attention: ${escapeHtml(attention.label)}">
+      <span aria-hidden="true">${attention.symbol}</span>
+    </span>
+    <span class="timeline-domain-name">${escapeHtml(item.domain_name)}</span>
+    <span class="status-mark" data-status="${item.status}" title="${escapeHtml(conditionLabel)}" aria-label="Condition: ${escapeHtml(conditionLabel)}">
+      <span class="status-symbol" aria-hidden="true">${conditionSymbol}</span>
     </span>
   `;
   return row;
@@ -568,6 +745,7 @@ async function saveReview() {
     body: JSON.stringify(payload),
   });
   await loadState();
+  state.timeline = { items: null, loading: false, error: null };
   state.activeView = "current";
   render();
 }
@@ -608,11 +786,7 @@ function summaryOptions(active) {
 }
 
 function modeOptions() {
-  return [
-    ["focus", "▲ Primary focus"],
-    ["maintain", "✓ Maintained"],
-    ["ignore", "○ Paused"],
-  ];
+  return Object.entries(modePresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
 }
 
 function selectedNumber(name) {

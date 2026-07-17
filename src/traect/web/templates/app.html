@@ -23,6 +23,7 @@
 
       <nav aria-label="Sections" id="main-nav">
         <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
+        <button class="tab" type="button" data-view="timeline" aria-selected="false">Timeline</button>
         <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
       </nav>
 
@@ -40,6 +41,15 @@
           <div class="actions actions-left">
             <button class="secondary" type="button" id="edit-review">Edit review</button>
           </div>
+        </section>
+
+        <section id="timeline-view" class="timeline hidden" aria-labelledby="timeline-title">
+          <div>
+            <h2 class="view-title" id="timeline-title">Timeline</h2>
+            <p class="hint">Saved weekly snapshots in reverse chronological order.</p>
+          </div>
+          <div class="status" id="timeline-status" role="status"></div>
+          <div class="timeline-entries" id="timeline-entries"></div>
         </section>
 
         <section id="edit-view" class="hidden">
@@ -99,6 +109,6 @@
     <script>
       window.TRAECT_API_BASE = "";
     </script>
-    <script src="/app.js?v=20260717-current-tradeoff" type="module"></script>
+    <script src="/app.js?v=20260717-timeline" type="module"></script>
   </body>
 </html>

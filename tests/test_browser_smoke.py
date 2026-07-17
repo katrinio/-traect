@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import Any
@@ -19,10 +19,12 @@ from traect.api.app import build_app
 def page() -> Iterator[Page]:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        page = browser.new_page()
+        context = browser.new_context(service_workers="block")
+        page = context.new_page()
         try:
             yield page
         finally:
+            context.close()
             browser.close()
 
 
@@ -74,13 +76,40 @@ def save_current_review(
     reason: str | None = None,
     ignored: set[str] | None = None,
 ) -> dict[str, Any]:
-    ignored = ignored or set()
     iso_year, iso_week, _ = date.today().isocalendar()
+    return save_week_review(
+        base_url,
+        workspace_id,
+        domains,
+        iso_year,
+        iso_week,
+        focus=focus,
+        sacrificed=sacrificed,
+        reason=reason,
+        ignored=ignored,
+    )
+
+
+def save_week_review(
+    base_url: str,
+    workspace_id: int,
+    domains: dict[str, int],
+    iso_year: int,
+    iso_week: int,
+    *,
+    focus: str | None = None,
+    sacrificed: str | None = None,
+    reason: str | None = None,
+    ignored: set[str] | None = None,
+    conditions: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    ignored = ignored or set()
+    conditions = conditions or {}
     states = [
         {
             "domain_id": domain_id,
             "mode": "focus" if name == focus else ("ignore" if name in ignored else "maintain"),
-            "status": "good",
+            "status": conditions.get(name, "good"),
             "comment": None,
         }
         for name, domain_id in domains.items()
@@ -132,6 +161,7 @@ def test_onboarding_to_weekly_review(page: Page, live_app: str) -> None:
 
     expect(current_groups.get_by_role("heading", name="Focus")).to_be_visible()
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Timeline")).to_be_visible()
     assert page_errors == []
 
 
@@ -248,3 +278,174 @@ def test_current_domain_overview_still_handles_domain_counts(page: Page, live_ap
 
     expect(page.locator("#current-groups .current-row")).to_have_count(domain_count)
     expect(page.get_by_role("button", name="Edit review")).to_be_visible()
+
+
+@pytest.mark.browser
+def test_timeline_empty_state_and_viewing_it_does_not_create_a_review(page: Page, live_app: str) -> None:
+    workspace_id, _ = seed_workspace(live_app, ["Work"])
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    expect(page.get_by_text("No weekly reviews yet.", exact=True)).to_be_visible()
+    history_hint = page.get_by_text("The history will appear here after the first review is saved.", exact=True)
+    expect(history_hint).to_be_visible()
+    expect(page.get_by_role("button", name="Back to Current")).to_be_visible()
+    assert request_json(live_app, "GET", f"/workspaces/{workspace_id}/weeks")["items"] == []
+
+
+@pytest.mark.browser
+def test_timeline_orders_weeks_and_renders_tradeoff_variants(page: Page, live_app: str) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
+    save_week_review(live_app, workspace_id, domains, 2026, 25)
+    save_week_review(live_app, workspace_id, domains, 2026, 26, focus="Work")
+    save_week_review(live_app, workspace_id, domains, 2026, 27, focus="Work", sacrificed="Health")
+    save_week_review(
+        live_app,
+        workspace_id,
+        domains,
+        2026,
+        28,
+        focus="Work",
+        sacrificed="Health",
+        reason="Release",
+    )
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    weeks = page.locator(".timeline-week")
+    expect(weeks).to_have_count(4)
+    expect(weeks.locator(".timeline-week-heading")).to_have_text(
+        ["Week 28, 2026", "Week 27, 2026", "Week 26, 2026", "Week 25, 2026"]
+    )
+    expect(weeks.nth(0).locator("[data-tradeoff-field='reason'] dd")).to_have_text("Release")
+    expect(weeks.nth(1).locator("[data-tradeoff-field='sacrifice'] dd")).to_have_text("Health")
+    expect(weeks.nth(1).locator("[data-tradeoff-field='reason']")).to_have_count(0)
+    expect(weeks.nth(2).locator("[data-tradeoff-field='sacrifice'] dd")).to_have_text("None recorded")
+    expect(weeks.nth(3).get_by_text("No primary focus recorded.", exact=True)).to_be_visible()
+    expect(weeks.nth(3).locator(".tradeoff-row")).to_have_count(0)
+
+
+@pytest.mark.browser
+def test_timeline_places_saved_current_week_first(page: Page, live_app: str) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    today = date.today()
+    current_year, current_week, _ = today.isocalendar()
+    prior_year, prior_week, _ = (today - timedelta(days=7)).isocalendar()
+    save_week_review(live_app, workspace_id, domains, prior_year, prior_week)
+    save_current_review(live_app, workspace_id, domains, focus="Work")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    headings = page.locator(".timeline-week-heading")
+    expect(headings).to_have_count(2)
+    expect(headings.first).to_have_text(f"Week {current_week}, {current_year}")
+
+
+@pytest.mark.browser
+def test_timeline_keeps_attention_condition_and_historical_domains_separate(page: Page, live_app: str) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Health", "Sport"])
+    save_week_review(
+        live_app,
+        workspace_id,
+        domains,
+        2026,
+        28,
+        focus="Work",
+        sacrificed="Health",
+        ignored={"Sport"},
+        conditions={"Work": "good", "Health": "warning", "Sport": "critical"},
+    )
+    request_json(live_app, "PATCH", f"/domains/{domains['Work']}", {"name": "Career"})
+    request_json(live_app, "POST", f"/domains/{domains['Health']}/archive")
+    request_json(live_app, "POST", f"/workspaces/{workspace_id}/domains", {"name": "Rest"})
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    week = page.locator(".timeline-week")
+    expect(week.locator(".timeline-domain-name", has_text="Work")).to_be_visible()
+    expect(week.locator(".timeline-domain-name", has_text="Health")).to_be_visible()
+    expect(week.locator(".timeline-domain-name", has_text="Sport")).to_be_visible()
+    expect(week.get_by_text("Career", exact=True)).to_have_count(0)
+    expect(week.get_by_text("Rest", exact=True)).to_have_count(0)
+    primary_attention = week.locator(".timeline-domain-row").nth(0).locator("[aria-label='Attention: Primary focus']")
+    expect(primary_attention).to_be_visible()
+    expect(week.locator("[data-status='warning'][aria-label='Condition: At Risk']")).to_be_visible()
+    expect(week.locator("[data-status='critical'][aria-label='Condition: Critical']")).to_be_visible()
+
+
+@pytest.mark.browser
+@pytest.mark.parametrize("week_count", [1, 5, 20, 52])
+def test_timeline_handles_expected_history_sizes(page: Page, live_app: str, week_count: int) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    for week in range(1, week_count + 1):
+        save_week_review(live_app, workspace_id, domains, 2025, week)
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    expect(page.locator(".timeline-week")).to_have_count(week_count)
+
+
+@pytest.mark.browser
+def test_timeline_survives_malformed_week_and_preserves_long_mobile_text(page: Page, live_app: str) -> None:
+    long_name = "Long historical Domain name " + "D" * 85
+    long_reason = "R" * 240
+    workspace_id, domains = seed_workspace(live_app, [long_name])
+    save_week_review(live_app, workspace_id, domains, 2026, 28, focus=long_name, reason=None)
+
+    page.route(
+        f"{live_app}/workspaces/{workspace_id}/weeks",
+        lambda route: route.fulfill(
+            json={
+                "items": [
+                    {
+                        "iso_year": 2026,
+                        "iso_week": 28,
+                        "focus_domain_id": domains[long_name],
+                        "focus_domain_name": long_name,
+                        "sacrificed_domain_id": None,
+                        "sacrificed_domain_name": None,
+                        "sacrifice_reason": long_reason,
+                        "states": [
+                            {
+                                "domain_id": domains[long_name],
+                                "domain_name": long_name,
+                                "mode": "focus",
+                                "status": "good",
+                            },
+                            {"domain_id": 999, "mode": "broken", "status": "good"},
+                        ],
+                    }
+                ]
+            }
+        ),
+    )
+    page.set_viewport_size({"width": 375, "height": 760})
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    timeline = page.locator("#timeline-view")
+    expect(timeline.get_by_text(long_name, exact=True)).to_have_count(2)
+    expect(timeline.locator("[data-tradeoff-field='reason'] dd")).to_have_text(long_reason)
+    expect(timeline.get_by_text("Some saved data could not be shown:", exact=False)).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+@pytest.mark.browser
+def test_timeline_failed_request_is_actionable(page: Page, live_app: str) -> None:
+    workspace_id, _ = seed_workspace(live_app, ["Work"])
+    page.route(
+        f"{live_app}/workspaces/{workspace_id}/weeks",
+        lambda route: route.fulfill(status=500, json={"error": "history unavailable"}),
+    )
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+
+    expect(page.get_by_text("Timeline could not be loaded. Try again.", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Retry")).to_be_visible()
