@@ -6,6 +6,7 @@
 
 ```bash
 poetry install
+poetry run playwright install chromium
 ```
 
 ## Проверки
@@ -14,6 +15,12 @@ poetry install
 poetry run ruff check .
 poetry run mypy src
 poetry run pytest tests --cov=src
+```
+
+Браузерный smoke-тест входит в общий запуск pytest. Для запуска только пользовательского потока:
+
+```bash
+poetry run pytest tests/test_browser_smoke.py -m browser
 ```
 
 ## Область

@@ -1,5 +1,6 @@
 const apiBase = window.TRAECT_API_BASE || "";
 const storageKey = "traect.workspace_id";
+const commentLimit = 300;
 const weekParts = isoWeek(new Date());
 
 const state = {
@@ -92,7 +93,7 @@ if (el.backToCurrentButton) {
   });
 }
 
-boot().catch((error) => setStatus(el.reviewStatus, error.message, true));
+boot().catch((error) => setStatus(el.setupStatus || el.reviewStatus || el.manageStatus, error.message, true));
 
 async function boot() {
   if ("serviceWorker" in navigator) {
@@ -146,7 +147,9 @@ function render() {
 
 function renderNavigation() {
   const shouldShow = Boolean(state.workspace);
-  el.mainNav.classList.toggle("hidden", !shouldShow);
+  if (el.mainNav) {
+    el.mainNav.classList.toggle("hidden", !shouldShow);
+  }
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.setAttribute("aria-selected", String(shouldShow && button.dataset.view === state.activeView));
   });
@@ -273,15 +276,31 @@ function renderEdit() {
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   const active = activeDomains();
   el.reviewDomains.replaceChildren(...active.map((domain) => renderEditRow(domain, statesByDomainId.get(domain.id))));
-  document.querySelector("select[name='focus_domain_id']").innerHTML = summaryOptions(active, review?.focus_domain_id);
-  document.querySelector("select[name='sacrificed_domain_id']").innerHTML = summaryOptions(active, review?.sacrificed_domain_id);
-  document.querySelector("select[name='focus_domain_id']").value = review?.focus_domain_id ? String(review.focus_domain_id) : "";
-  document.querySelector("select[name='sacrificed_domain_id']").value = review?.sacrificed_domain_id ? String(review.sacrificed_domain_id) : "";
-  document.querySelector("textarea[name='sacrifice_reason']").value = review?.sacrifice_reason || "";
+  const focusSelect = document.querySelector("select[name='focus_domain_id']");
+  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
+  focusSelect.innerHTML = summaryOptions(active);
+  sacrificedSelect.innerHTML = summaryOptions(active);
+
+  const focusedDomains = active.filter((domain) => statesByDomainId.get(domain.id)?.mode === "focus");
+  const savedFocusId = active.some((domain) => domain.id === review?.focus_domain_id) ? review.focus_domain_id : null;
+  const selectedFocusId = savedFocusId || (focusedDomains.length === 1 ? focusedDomains[0].id : null);
+  focusSelect.value = selectedFocusId ? String(selectedFocusId) : "";
+  sacrificedSelect.value = review?.sacrificed_domain_id ? String(review.sacrificed_domain_id) : "";
+  document.querySelector("input[name='sacrifice_reason']").value = review?.sacrifice_reason || "";
+  synchronizeFocusControls(selectedFocusId);
+
+  focusSelect.onchange = () => synchronizeFocusControls(selectedNumber("focus_domain_id"));
+  sacrificedSelect.onchange = () => {
+    if (sacrificedSelect.value === focusSelect.value) {
+      sacrificedSelect.value = "";
+    }
+    synchronizeTradeOffReason();
+  };
   document.querySelector("textarea[name='notes']").value = review?.notes || "";
 }
 
 function renderEditRow(domain, currentState) {
+  const comment = currentState?.comment || "";
   const row = document.createElement("section");
   row.className = "domain";
   row.innerHTML = `
@@ -289,27 +308,93 @@ function renderEditRow(domain, currentState) {
       <div class="domain-name">${escapeHtml(domain.name)}</div>
     </div>
     <div class="domain-grid">
-      <label>Mode
+      <label>Attention this week
         <select name="mode_${domain.id}">
           ${modeOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
-      <label>Status
+      <label>Condition now
         <select name="status_${domain.id}">
           <option value="good">✓ Stable</option>
-          <option value="warning">⚠ At Risk</option>
+          <option value="warning">⚠ At risk</option>
           <option value="critical">! Critical</option>
         </select>
       </label>
-      <label class="full">Comment
-        <textarea name="comment_${domain.id}" placeholder="Optional"></textarea>
-      </label>
+      <details class="domain-context full" ${comment ? "open" : ""}>
+        <summary>${comment ? "Edit context" : "Add context"}</summary>
+        <label class="context-field">Context
+          <textarea name="comment_${domain.id}" maxlength="${commentLimit}"
+            placeholder="What explains this attention choice or condition?"></textarea>
+          <span class="character-count" aria-live="polite"></span>
+        </label>
+      </details>
     </div>
   `;
-  row.querySelector(`select[name="mode_${domain.id}"]`).value = currentState?.mode || "ignore";
+  const modeSelect = row.querySelector(`select[name="mode_${domain.id}"]`);
+  const commentInput = row.querySelector(`textarea[name="comment_${domain.id}"]`);
+  const commentSummary = row.querySelector(".domain-context summary");
+  const characterCount = row.querySelector(".character-count");
+
+  modeSelect.value = currentState?.mode || "ignore";
   row.querySelector(`select[name="status_${domain.id}"]`).value = currentState?.status || "good";
-  row.querySelector(`textarea[name="comment_${domain.id}"]`).value = currentState?.comment || "";
+  commentInput.value = comment;
+  updateCommentContext(commentInput, commentSummary, characterCount);
+
+  modeSelect.addEventListener("change", () => {
+    const focusSelect = document.querySelector("select[name='focus_domain_id']");
+    if (modeSelect.value === "focus") {
+      focusSelect.value = String(domain.id);
+      synchronizeFocusControls(domain.id);
+    } else if (focusSelect.value === String(domain.id)) {
+      focusSelect.value = "";
+      synchronizeFocusControls(null);
+    }
+  });
+  commentInput.addEventListener("input", () => updateCommentContext(commentInput, commentSummary, characterCount));
   return row;
+}
+
+function synchronizeFocusControls(focusDomainId) {
+  document.querySelectorAll("select[name^='mode_']").forEach((select) => {
+    const domainId = Number(select.name.replace("mode_", ""));
+    if (domainId === focusDomainId) {
+      select.value = "focus";
+    } else if (select.value === "focus") {
+      select.value = "maintain";
+    }
+  });
+  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
+  sacrificedSelect.disabled = focusDomainId === null;
+  sacrificedSelect.querySelector("option[value='']").textContent = focusDomainId === null
+    ? "Choose a main focus first"
+    : "None this week";
+  sacrificedSelect.querySelectorAll("option").forEach((option) => {
+    option.disabled = option.value === String(focusDomainId);
+  });
+  if (focusDomainId === null) {
+    sacrificedSelect.value = "";
+  }
+  if (sacrificedSelect && sacrificedSelect.value === String(focusDomainId)) {
+    sacrificedSelect.value = "";
+  }
+  synchronizeTradeOffReason();
+}
+
+function synchronizeTradeOffReason() {
+  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
+  const reasonInput = document.querySelector("input[name='sacrifice_reason']");
+  const hasSacrifice = Boolean(sacrificedSelect.value);
+  reasonInput.disabled = !hasSacrifice;
+  reasonInput.placeholder = hasSacrifice ? "What caused this trade-off?" : "Choose what gave way first";
+  if (!hasSacrifice) {
+    reasonInput.value = "";
+  }
+}
+
+function updateCommentContext(input, summary, counter) {
+  const length = input.value.length;
+  summary.textContent = length > 0 ? "Edit context" : "Add context";
+  counter.textContent = `${length} / ${commentLimit}`;
 }
 
 function renderDomains() {
@@ -410,9 +495,7 @@ async function saveSetup() {
     body: JSON.stringify({ name: workspaceName, domains: domainNames.map((name) => ({ name })) }),
   });
   window.localStorage.setItem(storageKey, String(response.id));
-  await loadState();
-  state.activeView = "current";
-  render();
+  window.location.replace("/");
 }
 
 async function saveReview() {
@@ -420,7 +503,7 @@ async function saveReview() {
   const payload = {
     focus_domain_id: selectedNumber("focus_domain_id"),
     sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
-    sacrifice_reason: document.querySelector("textarea[name='sacrifice_reason']").value.trim() || null,
+    sacrifice_reason: document.querySelector("input[name='sacrifice_reason']").value.trim() || null,
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
     states: active.map((domain) => ({
       domain_id: domain.id,
@@ -465,8 +548,8 @@ function activeDomains() {
   return state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
 }
 
-function summaryOptions(active, selectedId) {
-  const options = ['<option value="">None</option>'];
+function summaryOptions(active) {
+  const options = ['<option value="">None this week</option>'];
   for (const domain of active) {
     options.push(`<option value="${domain.id}">${escapeHtml(domain.name)}</option>`);
   }
@@ -475,9 +558,9 @@ function summaryOptions(active, selectedId) {
 
 function modeOptions() {
   return [
-    ["focus", "▲ Focus"],
-    ["maintain", "✓ Maintain"],
-    ["ignore", "○ Ignore"],
+    ["focus", "▲ Primary focus"],
+    ["maintain", "✓ Maintained"],
+    ["ignore", "○ Paused"],
   ];
 }
 
@@ -501,6 +584,7 @@ async function withStatus(element, action) {
 }
 
 function setStatus(element, message, isError = false) {
+  if (!element) return;
   element.textContent = message;
   element.className = isError ? "status error" : "status";
 }
