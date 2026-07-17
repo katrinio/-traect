@@ -1,25 +1,25 @@
 # Storage
 
-The project stores its data in a SQL database through SQLAlchemy.
+Проект хранит данные в SQL-базе через SQLAlchemy.
 
-## What is stored
+## Что хранится
 
 - workspaces
 - domains
 - weeks
-- per-week domain states
+- состояния domain по неделям
 
-## Where it lives
+## Где хранится
 
-The database location is configured outside the codebase.
-For local development, Alembic defaults to `sqlite:///traect.db` unless `TRAECT_DATABASE_URL` is set.
+Расположение базы данных настраивается вне кодовой базы.
+Для локальной разработки Alembic по умолчанию использует `sqlite:///traect.db`, если не задан `TRAECT_DATABASE_URL`.
 
-## Behavior
+## Поведение
 
-- application writes go through the ORM
-- schema changes are applied with Alembic migrations
-- domain data is not embedded in UI code
+- запись данных приложения идёт через ORM
+- изменения схемы применяются миграциями Alembic
+- данные domain не встраиваются в код UI
 
-## Notes
+## Заметки
 
-The model is intentionally small so it can support future workspace types without a rewrite.
+Модель намеренно небольшая, чтобы в будущем поддерживать другие типы workspace без переписывания.

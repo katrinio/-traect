@@ -2,49 +2,49 @@
 
 -traect — это weekly attention tracker.
 
-Он помогает видеть, как ограниченное внимание распределяется между user-defined domains со временем, чтобы понимать компромиссы, а не пытаться одновременно держать все на максимуме.
+Он помогает увидеть, как ограниченное внимание распределяется между `Domain`, заданными пользователем, с течением времени, чтобы понимать компромиссы, а не пытаться держать всё на максимуме одновременно.
 
-## Core idea
+## Основная идея
 
-Модель намеренно generic:
+Модель намеренно нейтральна:
 
-- `Workspace` группирует один setup или context.
-- `Domain` — reusable area of attention, например Work, Health или Projects.
-- `Week` хранит один weekly review.
+- `Workspace` группирует одну настройку или контекст.
+- `Domain` — переиспользуемая область внимания, например Work, Health или Projects.
+- `Week` хранит один еженедельный обзор.
 - `WeekDomainState` хранит состояние одного `Domain` в одной `Week`.
 
-Пока UI может называть эти области “Spheres”, но data model остается neutral, чтобы позже поддерживать другие workspaces.
+Пока в интерфейсе эти области могут называться «Spheres», но модель данных остаётся нейтральной, чтобы в будущем поддерживать другие workspace.
 
-## Что трекает app
+## Что отслеживает приложение
 
-- weekly focus
-- what had to be sacrificed
-- why it happened
-- notes for the week
-- status и mode для каждого domain
+- фокус недели
+- чем пришлось пожертвовать
+- почему так вышло
+- заметки за неделю
+- статус и режим для каждого domain
 
-## Что не входит в first version
+## Что не входит в первую версию
 
-- tasks
-- habits
-- calendar features
-- notifications
-- AI recommendations
+- задачи
+- привычки
+- функции календаря
+- уведомления
+- AI-рекомендации
 
-## Implemented backend workflow
+## Реализованный backend-функционал
 
-Первый functional slice уже умеет:
+Первый рабочий срез уже умеет:
 
 - создавать `Workspace`
-- создавать, переименовывать, list, reorder, archive и restore `Domain`
-- создавать или обновлять weekly review для `Workspace`
-- хранить one state per active domain for a week
-- получать current week
-- получать past weeks в reverse chronological order
+- создавать, переименовывать, получать список, менять порядок, архивировать и восстанавливать `Domain`
+- создавать или обновлять еженедельный обзор для `Workspace`
+- хранить одно состояние на активный domain за неделю
+- получать текущую неделю
+- получать прошлые недели в обратном хронологическом порядке
 
 ## HTTP API
 
-Backend exposes небольшой HTTP surface:
+Backend предоставляет небольшой набор HTTP-эндпоинтов:
 
 - `POST /workspaces`
 - `GET /workspaces/{workspace_id}`
@@ -58,40 +58,69 @@ Backend exposes небольшой HTTP surface:
 - `GET /workspaces/{workspace_id}/weeks/current`
 - `GET /workspaces/{workspace_id}/weeks`
 
-## First screen
+## Поток экранов
 
-Сейчас app показывает Weekly Review page как первый usable screen.
+После onboarding приложение работает через три основных экрана:
+
+- `Current` — компактный обзор текущей ISO-недели только для чтения
+- `Edit review` — редактор еженедельного обзора
+- `Domains` — минимальное управление доменами
+
+`Current` отвечает на один вопрос: что происходит прямо сейчас.
+
+Он группирует активные `Domain` по `Mode`:
+
+- `Focus`
+- `Maintain`
+- `Ignore`
+
+`Status` остаётся отдельным понятием и только аннотирует строку domain:
+
+- `Stable`
+- `At Risk`
+- `Critical`
+
+Таким образом `Mode` и `Status` не смешиваются в одном контроле или одной визуальной группе.
+
+## Edit review
+
+`Edit review` редактирует текущую ISO-неделю.
 
 Он содержит:
 
-- current ISO week
-- every active domain
-- status, mode и comment для каждого domain
-- focus, sacrificed, reason и notes for the week
-- одну save action
+- режим для каждого активного domain
+- статус для каждого активного domain
+- опциональный комментарий для каждого domain
+- focus
+- sacrificed
+- reason
+- notes
+- действие сохранения
 
-## Workspace setup
+## Настройка Workspace
 
-Если база пустая, app открывает setup screen.
+Если база данных пуста, приложение открывает экран настройки.
 
 Он позволяет:
 
-- задать `Workspace` name
-- добавить initial `Domain`
+- задать имя `Workspace`
+- добавить начальные `Domain`
 - удалить `Domain` до сохранения
-- reorder `Domain` до сохранения
-- создать `Workspace` и initial `Domain` одним действием
+- изменить порядок `Domain` до сохранения
+- создать `Workspace` и начальные `Domain` одним действием
 
-## Domain management
+После успешного создания `Workspace` экран настройки исчезает, и приложение переходит на `Current`.
 
-Для существующего `Workspace` доступен минимальный screen управления `Domain`.
+## Управление доменами
+
+Для существующего `Workspace` доступен минимальный экран управления `Domain`.
 
 Он позволяет:
 
 - создать `Domain`
 - переименовать `Domain`
-- reorder active `Domain`
-- archive `Domain`
-- restore archived `Domain`
+- изменить порядок активных `Domain`
+- архивировать `Domain`
+- восстановить архивный `Domain`
 
-Archived `Domain` остаются в historical weekly reviews, но не попадают в new weekly check-ins автоматически.
+Архивные `Domain` остаются в исторических еженедельных обзорах, но не попадают автоматически в новые еженедельные check-in.

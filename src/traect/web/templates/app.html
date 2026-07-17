@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#1D1E20">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <title>-traect</title>
+    <link rel="stylesheet" href="/tokens.css">
+    <link rel="stylesheet" href="/typography.css">
+    <link rel="stylesheet" href="/layout.css">
+    <link rel="stylesheet" href="/components.css">
+  </head>
+  <body>
+    <main class="app">
+      <header>
+        <div>
+          <h1>-traect</h1>
+          <div class="meta" id="headline"></div>
+        </div>
+      </header>
+
+      <nav aria-label="Sections" id="main-nav">
+        <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
+        <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
+      </nav>
+
+      <main>
+        <section id="current-view">
+          <div class="meta" id="week-meta"></div>
+
+          <section class="current-groups" id="current-groups"></section>
+
+          <div class="actions actions-left">
+            <button class="secondary" type="button" id="edit-review">Edit review</button>
+          </div>
+        </section>
+
+        <section id="edit-view" class="hidden">
+          <div class="view-title">Edit review</div>
+
+          <form id="review-form" class="split">
+            <section>
+              <div class="domains" id="review-domains"></div>
+            </section>
+
+            <section class="week-summary">
+              <h3 class="section-title">Week</h3>
+              <div class="summary-grid">
+                <label>Focus
+                  <select name="focus_domain_id"></select>
+                </label>
+                <label>Sacrificed
+                  <select name="sacrificed_domain_id"></select>
+                </label>
+                <label>Reason<textarea name="sacrifice_reason"></textarea></label>
+                <label>Notes<textarea name="notes"></textarea></label>
+              </div>
+            </section>
+
+            <div class="actions">
+              <button class="secondary" type="button" id="back-to-current">Back</button>
+              <button class="primary" type="submit">Save</button>
+            </div>
+            <div class="status" id="review-status"></div>
+          </form>
+        </section>
+
+        <section id="manage-view" class="manage hidden">
+          <div class="toolbar">
+            <h3 class="section-title">Active</h3>
+            <button class="ghost" type="button" id="add-active-domain">Add Domain</button>
+          </div>
+          <div id="manage-domains" class="domain-list"></div>
+          <div class="status" id="manage-status"></div>
+
+          <section>
+            <h3 class="section-title">Archived</h3>
+            <div id="archived-domains" class="domain-list"></div>
+          </section>
+        </section>
+      </main>
+    </main>
+    <script>
+      window.TRAECT_API_BASE = "";
+    </script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

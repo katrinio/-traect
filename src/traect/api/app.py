@@ -5,11 +5,15 @@ from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from typing import Any, cast
+from wsgiref.simple_server import make_server
+
+from sqlalchemy import select
 
 from traect.app.database import create_schema, make_engine, make_session_factory
 from traect.app.errors import NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
+from traect.domain.models import Workspace
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
 
@@ -22,6 +26,8 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
         path = environ.get("PATH_INFO", "/")
+        if method == "GET" and path in {"/", "/index.html"}:
+            return _serve_root(start_response, session_factory)
         static = _serve_static(start_response, method, path)
         if static is not None:
             return static
@@ -57,12 +63,25 @@ def _respond(start_response: Callable[..., Any], status: str, content_type: str,
     return [body.encode()]
 
 
+def _serve_root(
+    start_response: Callable[..., Any],
+    session_factory: Callable[[], Any],
+) -> list[bytes]:
+    with session_factory() as session:
+        workspace_exists = session.execute(select(Workspace.id)).first() is not None
+    template = "templates/app.html" if workspace_exists else "templates/setup.html"
+    body = (WEB_ROOT / template).read_text(encoding="utf-8")
+    return _respond(start_response, "200 OK", "text/html; charset=utf-8", body)
+
+
 def _serve_static(start_response: Callable[..., Any], method: str, path: str) -> list[bytes] | None:
     if method != "GET":
         return None
     mapping = {
-        "/": ("templates/index.html", "text/html; charset=utf-8"),
-        "/index.html": ("templates/index.html", "text/html; charset=utf-8"),
+        "/tokens.css": ("static/tokens.css", "text/css; charset=utf-8"),
+        "/typography.css": ("static/typography.css", "text/css; charset=utf-8"),
+        "/layout.css": ("static/layout.css", "text/css; charset=utf-8"),
+        "/components.css": ("static/components.css", "text/css; charset=utf-8"),
         "/app.js": ("static/app.js", "text/javascript; charset=utf-8"),
         "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
@@ -196,3 +215,10 @@ def _load_payload(body: bytes) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValidationError("request body must be a JSON object")
     return cast(dict[str, Any], parsed)
+
+
+def main() -> None:
+    app = build_app("sqlite:///traect.db")
+    with make_server("127.0.0.1", 8000, app) as server:
+        print("Serving on http://127.0.0.1:8000")
+        server.serve_forever()

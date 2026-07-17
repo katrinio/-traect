@@ -1,0 +1,21 @@
+:root {
+  color-scheme: dark;
+  --bg: #1d1e20;
+  --surface: #25272a;
+  --surface-2: #2b2d31;
+  --border: #3a3c3f;
+  --text: #d8d8d5;
+  --text-muted: #9a9a96;
+  --focus-blue: #7fa8c8;
+  --maintain-green: #8daf9a;
+  --risk-amber: #c9b27c;
+  --inactive-gray: #6e7278;
+  --critical: #c58f8f;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius: 0.35rem;
+}

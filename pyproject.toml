@@ -17,6 +17,9 @@ alembic = "^1.13.0"
 requires = ["poetry-core>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry.scripts]
+traect = "traect.api.app:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"

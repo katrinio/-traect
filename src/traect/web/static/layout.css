@@ -1,0 +1,179 @@
+.app {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+nav {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+main {
+  display: grid;
+  gap: var(--space-5);
+}
+
+section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.split {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.toolbar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: end;
+  padding-top: var(--space-1);
+}
+
+.actions-left {
+  justify-content: start;
+}
+
+.domains {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.current-groups {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.domain-group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.domain-group .section-title {
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.current-rows {
+  display: grid;
+}
+
+.current-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.domain-list {
+  display: grid;
+}
+
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.domain-row:last-child {
+  border-bottom: 0;
+}
+
+.domain-row .inline-input,
+.domain-row .domain-name-static {
+  flex: 1;
+  min-width: 0;
+}
+
+.domain {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.domain:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.domain-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.domain-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: end;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.summary-grid,
+.setup-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.week-summary,
+.setup,
+.manage {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 40rem) {
+  header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  nav {
+    overflow-x: auto;
+    padding-bottom: var(--space-1);
+  }
+
+  .domain-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .actions,
+  .domain-actions {
+    justify-content: stretch;
+  }
+
+  .actions > *,
+  .domain-actions > * {
+    flex: 1;
+  }
+}

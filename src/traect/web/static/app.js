@@ -1,56 +1,98 @@
 const apiBase = window.TRAECT_API_BASE || "";
 const storageKey = "traect.workspace_id";
-const today = new Date();
-const weekParts = isoWeek(today);
+const weekParts = isoWeek(new Date());
 
 const state = {
   workspace: null,
   domains: [],
-  week: null,
-  view: "review",
+  currentReview: null,
+  activeView: "current",
   setupDraft: [{ name: "" }],
+  setupWorkspaceName: "",
 };
 
-const headlineEl = document.getElementById("headline");
-const saveStateEl = document.getElementById("save-state");
-const weekMetaEl = document.getElementById("week-meta");
-const domainCountEl = document.getElementById("domain-count");
-const reviewViewEl = document.getElementById("review-view");
-const setupViewEl = document.getElementById("setup-view");
-const manageViewEl = document.getElementById("manage-view");
-const reviewForm = document.getElementById("review-form");
-const setupForm = document.getElementById("setup-form");
-const setupDomainsEl = document.getElementById("setup-domains");
-const reviewDomainsEl = document.getElementById("review-domains");
-const manageDomainsEl = document.getElementById("manage-domains");
-const archivedDomainsEl = document.getElementById("archived-domains");
-const setupStatusEl = document.getElementById("setup-status");
-const reviewStatusEl = document.getElementById("review-status");
-const manageStatusEl = document.getElementById("manage-status");
+const el = {
+  headline: document.getElementById("headline"),
+  mainNav: document.getElementById("main-nav"),
+  setupView: document.getElementById("setup-view"),
+  currentView: document.getElementById("current-view"),
+  editView: document.getElementById("edit-view"),
+  manageView: document.getElementById("manage-view"),
+  weekMeta: document.getElementById("week-meta"),
+  currentGroups: document.getElementById("current-groups"),
+  reviewDomains: document.getElementById("review-domains"),
+  manageDomains: document.getElementById("manage-domains"),
+  archivedDomains: document.getElementById("archived-domains"),
+  setupDomains: document.getElementById("setup-domains"),
+  setupForm: document.getElementById("setup-form"),
+  reviewForm: document.getElementById("review-form"),
+  setupStatus: document.getElementById("setup-status"),
+  reviewStatus: document.getElementById("review-status"),
+  manageStatus: document.getElementById("manage-status"),
+  editReviewButton: document.getElementById("edit-review"),
+  backToCurrentButton: document.getElementById("back-to-current"),
+};
+
+const modeLabels = {
+  focus: "▲ Focus",
+  maintain: "✓ Maintenance",
+  ignore: "○ Ignored",
+};
+
+const statusLabels = {
+  good: ["✓", "Stable"],
+  warning: ["⚠", "At Risk"],
+  critical: ["!", "Critical"],
+};
 
 document.querySelectorAll("[data-view]").forEach((button) => {
-  button.addEventListener("click", () => setView(button.dataset.view));
-});
-document.getElementById("add-domain").addEventListener("click", () => {
-  state.setupDraft.push({ name: "" });
-  renderSetup();
-});
-document.getElementById("add-active-domain").addEventListener("click", async () => {
-  await withInlineError(manageStatusEl, createDomainFromManage);
-});
-document.getElementById("save-order").addEventListener("click", async () => {
-  await withInlineError(manageStatusEl, saveOrder);
-});
-setupForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await withInlineError(setupStatusEl, createWorkspaceWithDomains);
-});
-reviewForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  await withInlineError(reviewStatusEl, saveWeek);
+  button.addEventListener("click", () => {
+    setActiveView(button.dataset.view || "current");
+  });
 });
 
-boot().catch((error) => setStatus(reviewStatusEl, error.message, true));
+if (el.setupForm) {
+  el.setupForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await withStatus(el.setupStatus, saveSetup);
+  });
+}
+
+if (el.reviewForm) {
+  el.reviewForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await withStatus(el.reviewStatus, saveReview);
+  });
+}
+
+const addInitialDomainButton = document.getElementById("add-domain");
+if (addInitialDomainButton) {
+  addInitialDomainButton.addEventListener("click", () => {
+    state.setupDraft.push({ name: "" });
+    renderSetup();
+  });
+}
+
+const addActiveDomainButton = document.getElementById("add-active-domain");
+if (addActiveDomainButton) {
+  addActiveDomainButton.addEventListener("click", async () => {
+    await withStatus(el.manageStatus, createDomainFromManage);
+  });
+}
+
+if (el.editReviewButton) {
+  el.editReviewButton.addEventListener("click", () => {
+    setActiveView("edit");
+  });
+}
+
+if (el.backToCurrentButton) {
+  el.backToCurrentButton.addEventListener("click", () => {
+    setActiveView("current");
+  });
+}
+
+boot().catch((error) => setStatus(el.reviewStatus, error.message, true));
 
 async function boot() {
   if ("serviceWorker" in navigator) {
@@ -61,58 +103,79 @@ async function boot() {
 }
 
 async function loadState() {
-  const current = await fetchJSON("/workspaces/current", { ignore404: true });
-  if (!current) {
+  const currentWorkspace = await fetchJSON("/workspaces/current", { ignore404: true });
+  if (!currentWorkspace) {
     state.workspace = null;
     state.domains = [];
-    state.week = null;
-    state.view = "review";
+    state.currentReview = null;
+    state.activeView = "current";
     return;
   }
-  state.workspace = current;
-  const [domains, week] = await Promise.all([
+  state.workspace = currentWorkspace;
+  const [domains, review] = await Promise.all([
     fetchJSON(`/workspaces/${state.workspace.id}/domains`),
     fetchJSON(`/workspaces/${state.workspace.id}/weeks/current`, { ignore404: true }),
   ]);
   state.domains = domains.items;
-  state.week = week;
+  state.currentReview = review;
 }
 
 function render() {
-  renderTabs();
-  headlineEl.textContent = state.workspace
-    ? `${state.workspace.name}`
-    : "Create a workspace to start";
+  renderNavigation();
+  if (el.headline) {
+    el.headline.textContent = state.workspace ? state.workspace.name : "Workspace setup";
+  }
+
   if (!state.workspace) {
-    weekMetaEl.textContent = "";
-    domainCountEl.textContent = "";
-    showView("setup");
-    renderSetup();
+    showOnly("setup");
+    if (el.setupView) {
+      renderSetup();
+    }
     return;
   }
-  weekMetaEl.textContent = `Week ${weekParts.week}, ${weekParts.year}`;
-  renderReview();
-  renderManage();
-  showView(state.view);
+
+  if (el.weekMeta) {
+    el.weekMeta.textContent = `Week ${weekParts.week}, ${weekParts.year}`;
+  }
+
+  renderCurrent();
+  renderEdit();
+  renderDomains();
+  showOnly(state.activeView);
 }
 
-function renderTabs() {
+function renderNavigation() {
+  const shouldShow = Boolean(state.workspace);
+  el.mainNav.classList.toggle("hidden", !shouldShow);
   document.querySelectorAll("[data-view]").forEach((button) => {
-    button.setAttribute("aria-selected", String(button.dataset.view === state.view));
+    button.setAttribute("aria-selected", String(shouldShow && button.dataset.view === state.activeView));
   });
 }
 
-function showView(view) {
-  state.view = view;
-  setupViewEl.classList.toggle("hidden", view !== "setup" && !state.workspace);
-  reviewViewEl.classList.toggle("hidden", view !== "review" || !state.workspace);
-  manageViewEl.classList.toggle("hidden", view !== "domains" || !state.workspace);
-  renderTabs();
+function showOnly(view) {
+  if (el.setupView) {
+    el.setupView.classList.toggle("hidden", view !== "setup");
+  }
+  if (el.currentView) {
+    el.currentView.classList.toggle("hidden", view !== "current");
+  }
+  if (el.editView) {
+    el.editView.classList.toggle("hidden", view !== "edit");
+  }
+  if (el.manageView) {
+    el.manageView.classList.toggle("hidden", view !== "domains");
+  }
+}
+
+function setActiveView(view) {
+  state.activeView = view;
+  render();
 }
 
 function renderSetup() {
-  setupDomainsEl.replaceChildren(...state.setupDraft.map((item, index) => renderSetupDomain(item, index)));
-  setStatus(setupStatusEl, "");
+  if (!el.setupDomains || !el.setupStatus) return;
+  el.setupDomains.replaceChildren(...state.setupDraft.map((item, index) => renderSetupDomain(item, index)));
+  setStatus(el.setupStatus, "");
 }
 
 function renderSetupDomain(item, index) {
@@ -121,23 +184,23 @@ function renderSetupDomain(item, index) {
   row.innerHTML = `
     <div class="domain-grid">
       <label class="full">Domain
-        <input type="text" name="domain_${index}" value="${escapeHtml(item.name)}" autocomplete="off">
+        <input type="text" name="setup_domain_${index}" value="${escapeHtml(item.name)}" autocomplete="off">
       </label>
       <div class="domain-actions full">
-        <button class="secondary" type="button" data-move-up="${index}">Up</button>
-        <button class="secondary" type="button" data-move-down="${index}">Down</button>
+        <button class="secondary" type="button" data-up="${index}">Up</button>
+        <button class="secondary" type="button" data-down="${index}">Down</button>
         <button class="ghost" type="button" data-remove="${index}">Remove</button>
       </div>
     </div>
   `;
-  row.querySelector(`[data-remove]`).addEventListener("click", () => {
+  row.querySelector("[data-up]").addEventListener("click", () => moveSetupDomain(index, -1));
+  row.querySelector("[data-down]").addEventListener("click", () => moveSetupDomain(index, 1));
+  row.querySelector("[data-remove]").addEventListener("click", () => {
     if (state.setupDraft.length > 1) {
       state.setupDraft.splice(index, 1);
       renderSetup();
     }
   });
-  row.querySelector(`[data-move-up]`).addEventListener("click", () => moveSetupDomain(index, -1));
-  row.querySelector(`[data-move-down]`).addEventListener("click", () => moveSetupDomain(index, 1));
   row.querySelector("input").addEventListener("input", (event) => {
     item.name = event.target.value;
   });
@@ -145,41 +208,97 @@ function renderSetupDomain(item, index) {
 }
 
 function moveSetupDomain(index, offset) {
-  const target = index + offset;
-  if (target < 0 || target >= state.setupDraft.length) return;
-  [state.setupDraft[index], state.setupDraft[target]] = [state.setupDraft[target], state.setupDraft[index]];
+  const next = index + offset;
+  if (next < 0 || next >= state.setupDraft.length) return;
+  [state.setupDraft[index], state.setupDraft[next]] = [state.setupDraft[next], state.setupDraft[index]];
   renderSetup();
 }
 
-function renderReview() {
-  domainCountEl.textContent = `${state.domains.filter((domain) => domain.archived_at === null).length} active domains`;
-  const week = state.week;
-  const weekStates = new Map((week?.states || []).map((item) => [item.domain_id, item]));
-  const activeDomains = state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
-  reviewDomainsEl.replaceChildren(...activeDomains.map((domain) => renderReviewDomain(domain, weekStates.get(domain.id))));
-  populateSummarySelects(activeDomains);
-  document.querySelector("select[name='focus_domain_id']").value = week?.focus_domain_id ? String(week.focus_domain_id) : "";
-  document.querySelector("select[name='sacrificed_domain_id']").value = week?.sacrificed_domain_id ? String(week.sacrificed_domain_id) : "";
-  document.querySelector("textarea[name='sacrifice_reason']").value = week?.sacrifice_reason || "";
-  document.querySelector("textarea[name='notes']").value = week?.notes || "";
+function renderCurrent() {
+  if (!el.currentGroups) return;
+  const review = state.currentReview;
+  const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
+  const grouped = {
+    focus: [],
+    maintain: [],
+    ignore: [],
+  };
+
+  for (const domain of activeDomains()) {
+    const currentState = statesByDomainId.get(domain.id) || { mode: "ignore", status: "good" };
+    grouped[currentState.mode].push({ domain, state: currentState });
+  }
+
+  const groups = [
+    ["Focus", grouped.focus],
+    ["Maintenance", grouped.maintain],
+    ["Ignored", grouped.ignore],
+  ].filter(([, entries]) => entries.length > 0);
+
+  el.currentGroups.replaceChildren(...groups.map(([title, entries]) => renderGroup(title, entries)));
 }
 
-function renderReviewDomain(domain, existing) {
-  const wrapper = document.createElement("section");
-  wrapper.className = "domain";
-  wrapper.innerHTML = `
+function renderGroup(title, entries) {
+  const section = document.createElement("section");
+  section.className = "domain-group";
+  const heading = document.createElement("h3");
+  heading.className = "section-title";
+  heading.textContent = title;
+  const body = document.createElement("div");
+  body.className = "current-rows";
+  for (const entry of entries) {
+    body.appendChild(renderCurrentRow(entry.domain, entry.state));
+  }
+  section.append(heading, body);
+  return section;
+}
+
+function renderCurrentRow(domain, currentState) {
+  const status = currentState.status || "good";
+  const [symbol, label] = statusLabels[status] || statusLabels.good;
+  const row = document.createElement("div");
+  row.className = "current-row";
+  row.innerHTML = `
+    <span class="domain-name">${escapeHtml(domain.name)}</span>
+    <span class="status-mark" data-status="${status}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">
+      <span class="status-symbol" aria-hidden="true">${symbol}</span>
+    </span>
+  `;
+  return row;
+}
+
+function renderEdit() {
+  if (!el.reviewDomains) return;
+  const review = state.currentReview;
+  const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
+  const active = activeDomains();
+  el.reviewDomains.replaceChildren(...active.map((domain) => renderEditRow(domain, statesByDomainId.get(domain.id))));
+  document.querySelector("select[name='focus_domain_id']").innerHTML = summaryOptions(active, review?.focus_domain_id);
+  document.querySelector("select[name='sacrificed_domain_id']").innerHTML = summaryOptions(active, review?.sacrificed_domain_id);
+  document.querySelector("select[name='focus_domain_id']").value = review?.focus_domain_id ? String(review.focus_domain_id) : "";
+  document.querySelector("select[name='sacrificed_domain_id']").value = review?.sacrificed_domain_id ? String(review.sacrificed_domain_id) : "";
+  document.querySelector("textarea[name='sacrifice_reason']").value = review?.sacrifice_reason || "";
+  document.querySelector("textarea[name='notes']").value = review?.notes || "";
+}
+
+function renderEditRow(domain, currentState) {
+  const row = document.createElement("section");
+  row.className = "domain";
+  row.innerHTML = `
     <div class="domain-head">
       <div class="domain-name">${escapeHtml(domain.name)}</div>
     </div>
     <div class="domain-grid">
-      <label>Status
-        <select name="status_${domain.id}">
-          ${statusOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
-        </select>
-      </label>
       <label>Mode
         <select name="mode_${domain.id}">
           ${modeOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+        </select>
+      </label>
+      <label>Status
+        <select name="status_${domain.id}">
+          <option value="good">✓ Stable</option>
+          <option value="warning">⚠ At Risk</option>
+          <option value="critical">! Critical</option>
         </select>
       </label>
       <label class="full">Comment
@@ -187,82 +306,147 @@ function renderReviewDomain(domain, existing) {
       </label>
     </div>
   `;
-  wrapper.querySelector(`select[name="status_${domain.id}"]`).value = existing?.status || "warning";
-  wrapper.querySelector(`select[name="mode_${domain.id}"]`).value = existing?.mode || "maintain";
-  wrapper.querySelector(`textarea[name="comment_${domain.id}"]`).value = existing?.comment || "";
-  return wrapper;
+  row.querySelector(`select[name="mode_${domain.id}"]`).value = currentState?.mode || "ignore";
+  row.querySelector(`select[name="status_${domain.id}"]`).value = currentState?.status || "good";
+  row.querySelector(`textarea[name="comment_${domain.id}"]`).value = currentState?.comment || "";
+  return row;
 }
 
-function renderManage() {
-  const activeDomains = state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
-  const archivedDomains = state.domains.filter((domain) => domain.archived_at !== null).sort(bySortOrder);
-  manageDomainsEl.replaceChildren(...activeDomains.map((domain) => renderManageDomain(domain, false)));
-  archivedDomainsEl.replaceChildren(...archivedDomains.map((domain) => renderManageDomain(domain, true)));
+function renderDomains() {
+  if (!el.manageDomains || !el.archivedDomains) return;
+  const active = activeDomains();
+  const archived = state.domains.filter((domain) => domain.archived_at !== null).sort(bySortOrder);
+  el.manageDomains.replaceChildren(...active.map((domain) => renderActiveDomainRow(domain)));
+  el.archivedDomains.replaceChildren(...archived.map((domain) => renderArchivedDomainRow(domain)));
+  enableDragReorder(el.manageDomains);
 }
 
-function renderManageDomain(domain, archived) {
-  const wrapper = document.createElement("section");
-  wrapper.className = "domain";
-  wrapper.innerHTML = `
-    <div class="domain-grid">
-      <label class="full">Domain
-        <input type="text" name="name_${domain.id}" value="${escapeHtml(domain.name)}" autocomplete="off">
-      </label>
-      <div class="domain-actions full">
-        ${archived ? `<button class="secondary" type="button" data-restore="${domain.id}">Restore</button>` : ""}
-        ${!archived ? `<button class="secondary" type="button" data-move-up="${domain.id}">Up</button>` : ""}
-        ${!archived ? `<button class="secondary" type="button" data-move-down="${domain.id}">Down</button>` : ""}
-        ${!archived ? `<button class="ghost" type="button" data-archive="${domain.id}">Archive</button>` : ""}
-      </div>
-    </div>
+function renderActiveDomainRow(domain) {
+  const row = document.createElement("div");
+  row.className = "domain-row";
+  row.dataset.id = String(domain.id);
+  row.innerHTML = `
+    <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+    <input class="inline-input" type="text" value="${escapeHtml(domain.name)}" autocomplete="off" aria-label="Domain name">
+    <button class="ghost row-action" type="button" data-archive="${domain.id}">Archive</button>
   `;
-  const input = wrapper.querySelector(`input[name="name_${domain.id}"]`);
-  input.addEventListener("change", async () => {
-    await renameDomain(domain.id, input.value);
+  const input = row.querySelector("input");
+  input.addEventListener("change", async () => withStatus(el.manageStatus, async () => {
+    await fetchJSON(`/domains/${domain.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: input.value }),
+    });
+    await loadState();
+    render();
+  }));
+  row.querySelector("[data-archive]").addEventListener("click", () => archiveDomain(domain.id));
+  return row;
+}
+
+function renderArchivedDomainRow(domain) {
+  const row = document.createElement("div");
+  row.className = "domain-row";
+  row.innerHTML = `
+    <span class="domain-name-static">${escapeHtml(domain.name)}</span>
+    <button class="ghost row-action" type="button" data-restore="${domain.id}">Restore</button>
+  `;
+  row.querySelector("[data-restore]").addEventListener("click", () => restoreDomain(domain.id));
+  return row;
+}
+
+function enableDragReorder(container) {
+  const originalOrder = [...container.querySelectorAll(".domain-row")].map((row) => row.dataset.id);
+  container.querySelectorAll(".drag-handle").forEach((handle) => {
+    handle.addEventListener("pointerdown", (event) => {
+      const draggingRow = handle.closest(".domain-row");
+      if (!draggingRow) return;
+      event.preventDefault();
+      draggingRow.classList.add("dragging");
+      handle.setPointerCapture(event.pointerId);
+
+      const onMove = (moveEvent) => {
+        for (const sibling of container.querySelectorAll(".domain-row")) {
+          if (sibling === draggingRow) continue;
+          const rect = sibling.getBoundingClientRect();
+          if (moveEvent.clientY < rect.top || moveEvent.clientY > rect.bottom) continue;
+          const before = moveEvent.clientY < rect.top + rect.height / 2;
+          container.insertBefore(draggingRow, before ? sibling : sibling.nextSibling);
+          break;
+        }
+      };
+
+      const onUp = async () => {
+        draggingRow.classList.remove("dragging");
+        handle.releasePointerCapture(event.pointerId);
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        const newOrder = [...container.querySelectorAll(".domain-row")].map((row) => row.dataset.id);
+        if (newOrder.join() === originalOrder.join()) return;
+        await withStatus(el.manageStatus, async () => {
+          await fetchJSON(`/workspaces/${state.workspace.id}/domains/order`, {
+            method: "PUT",
+            body: JSON.stringify({ domain_ids: newOrder.map(Number) }),
+          });
+          await loadState();
+          render();
+        });
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
   });
-  const up = wrapper.querySelector("[data-move-up]");
-  const down = wrapper.querySelector("[data-move-down]");
-  const archive = wrapper.querySelector("[data-archive]");
-  const restore = wrapper.querySelector("[data-restore]");
-  if (up) up.addEventListener("click", () => moveManagedDomain(domain.id, -1));
-  if (down) down.addEventListener("click", () => moveManagedDomain(domain.id, 1));
-  if (archive) archive.addEventListener("click", () => archiveDomain(domain.id));
-  if (restore) restore.addEventListener("click", () => restoreDomain(domain.id));
-  return wrapper;
 }
 
-function populateSummarySelects(activeDomains) {
-  const options = [
-    '<option value="">None</option>',
-    ...activeDomains.map((domain) => `<option value="${domain.id}">${escapeHtml(domain.name)}</option>`),
-  ];
-  document.querySelector("select[name='focus_domain_id']").innerHTML = options.join("");
-  document.querySelector("select[name='sacrificed_domain_id']").innerHTML = options.join("");
-}
+async function saveSetup() {
+  const workspaceName = el.setupForm.workspace_name.value.trim();
+  const domainNames = state.setupDraft.map((item) => item.name.trim());
+  if (!workspaceName) throw new Error("Workspace name is required.");
+  if (domainNames.length === 0 || domainNames.some((name) => !name)) throw new Error("Domain names are required.");
+  if (hasDuplicateNames(domainNames)) throw new Error("Domain names must be unique.");
 
-async function createWorkspaceWithDomains() {
-  const workspaceName = setupForm.workspace_name.value.trim();
-  const trimmedNames = state.setupDraft.map((item) => item.name.trim());
-  clearSetupErrors();
-  if (!workspaceName) {
-    setStatus(setupStatusEl, "Workspace name is required.", true);
-    return;
-  }
-  if (trimmedNames.length === 0 || trimmedNames.some((name) => !name)) {
-    setStatus(setupStatusEl, "Domain names are required.", true);
-    return;
-  }
-  if (hasDuplicateNames(trimmedNames)) {
-    setStatus(setupStatusEl, "Domain names must be unique.", true);
-    return;
-  }
   const response = await fetchJSON("/workspaces", {
     method: "POST",
-    body: JSON.stringify({ name: workspaceName, domains: trimmedNames.map((name) => ({ name })) }),
+    body: JSON.stringify({ name: workspaceName, domains: domainNames.map((name) => ({ name })) }),
   });
   window.localStorage.setItem(storageKey, String(response.id));
   await loadState();
-  state.view = "review";
+  state.activeView = "current";
+  render();
+}
+
+async function saveReview() {
+  const active = activeDomains();
+  const payload = {
+    focus_domain_id: selectedNumber("focus_domain_id"),
+    sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
+    sacrifice_reason: document.querySelector("textarea[name='sacrifice_reason']").value.trim() || null,
+    notes: document.querySelector("textarea[name='notes']").value.trim() || null,
+    states: active.map((domain) => ({
+      domain_id: domain.id,
+      mode: document.querySelector(`select[name="mode_${domain.id}"]`).value,
+      status: document.querySelector(`select[name="status_${domain.id}"]`).value,
+      comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
+    })),
+  };
+  await fetchJSON(`/workspaces/${state.workspace.id}/weeks/${weekParts.year}/${weekParts.week}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  await loadState();
+  state.activeView = "current";
+  render();
+}
+
+async function archiveDomain(domainId) {
+  await fetchJSON(`/domains/${domainId}/archive`, { method: "POST" });
+  await loadState();
+  render();
+}
+
+async function restoreDomain(domainId) {
+  await fetchJSON(`/domains/${domainId}/restore`, { method: "POST" });
+  await loadState();
   render();
 }
 
@@ -277,75 +461,24 @@ async function createDomainFromManage() {
   render();
 }
 
-async function renameDomain(domainId, name) {
-  await withInlineError(manageStatusEl, async () => {
-    await fetchJSON(`/domains/${domainId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ name }),
-    });
-    await loadState();
-    render();
-  });
+function activeDomains() {
+  return state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
 }
 
-async function moveManagedDomain(domainId, offset) {
-  const activeDomains = state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
-  const index = activeDomains.findIndex((domain) => domain.id === domainId);
-  const target = index + offset;
-  if (index < 0 || target < 0 || target >= activeDomains.length) return;
-  const ids = activeDomains.map((domain) => domain.id);
-  [ids[index], ids[target]] = [ids[target], ids[index]];
-  await withInlineError(manageStatusEl, () => saveOrder(ids));
+function summaryOptions(active, selectedId) {
+  const options = ['<option value="">None</option>'];
+  for (const domain of active) {
+    options.push(`<option value="${domain.id}">${escapeHtml(domain.name)}</option>`);
+  }
+  return options.join("");
 }
 
-async function saveOrder(explicitIds = null) {
-  const activeDomains = state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
-  const ids = explicitIds || activeDomains.map((domain) => domain.id);
-  await fetchJSON(`/workspaces/${state.workspace.id}/domains/order`, {
-    method: "PUT",
-    body: JSON.stringify({ domain_ids: ids }),
-  });
-  await loadState();
-  render();
-}
-
-async function archiveDomain(domainId) {
-  await withInlineError(manageStatusEl, async () => {
-    await fetchJSON(`/domains/${domainId}/archive`, { method: "POST" });
-    await loadState();
-    render();
-  });
-}
-
-async function restoreDomain(domainId) {
-  await withInlineError(manageStatusEl, async () => {
-    await fetchJSON(`/domains/${domainId}/restore`, { method: "POST" });
-    await loadState();
-    render();
-  });
-}
-
-async function saveWeek() {
-  const activeDomains = state.domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
-  const payload = {
-    focus_domain_id: selectedNumber("focus_domain_id"),
-    sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
-    sacrifice_reason: document.querySelector("textarea[name='sacrifice_reason']").value.trim() || null,
-    notes: document.querySelector("textarea[name='notes']").value.trim() || null,
-    states: activeDomains.map((domain) => ({
-      domain_id: domain.id,
-      status: document.querySelector(`select[name='status_${domain.id}']`).value,
-      mode: document.querySelector(`select[name='mode_${domain.id}']`).value,
-      comment: document.querySelector(`textarea[name='comment_${domain.id}']`).value.trim() || null,
-    })),
-  };
-  await fetchJSON(`/workspaces/${state.workspace.id}/weeks/${weekParts.year}/${weekParts.week}`, {
-    method: "PUT",
-    body: JSON.stringify(payload),
-  });
-  await loadState();
-  render();
-  setStatus(reviewStatusEl, "Saved");
+function modeOptions() {
+  return [
+    ["focus", "▲ Focus"],
+    ["maintain", "✓ Maintain"],
+    ["ignore", "○ Ignore"],
+  ];
 }
 
 function selectedNumber(name) {
@@ -358,11 +491,7 @@ function hasDuplicateNames(names) {
   return new Set(normalized).size !== normalized.length;
 }
 
-function clearSetupErrors() {
-  setStatus(setupStatusEl, "");
-}
-
-async function withInlineError(element, action) {
+async function withStatus(element, action) {
   try {
     await action();
     setStatus(element, "");
@@ -390,27 +519,6 @@ async function fetchJSON(path, options = {}) {
     throw error;
   }
   return data;
-}
-
-function setView(view) {
-  state.view = view;
-  render();
-}
-
-function statusOptions() {
-  return [
-    ["good", "Good"],
-    ["warning", "Warning"],
-    ["critical", "Critical"],
-  ];
-}
-
-function modeOptions() {
-  return [
-    ["focus", "Focus"],
-    ["maintain", "Maintain"],
-    ["ignore", "Ignore"],
-  ];
 }
 
 function bySortOrder(left, right) {
