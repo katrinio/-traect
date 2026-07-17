@@ -29,7 +29,10 @@
 
       <main>
         <section id="current-view">
-          <h2 class="meta week-heading" id="week-meta"></h2>
+          <div class="current-week-meta">
+            <h2 class="meta week-heading" id="week-meta"></h2>
+            <p class="lifecycle-meta" id="current-lifecycle"></p>
+          </div>
 
           <section class="current-tradeoff hidden" id="current-tradeoff" aria-labelledby="current-tradeoff-title">
             <h3 class="section-title" id="current-tradeoff-title">This week</h3>
@@ -54,7 +57,9 @@
 
         <section id="edit-view" class="hidden">
           <div class="view-title">Edit review</div>
-          <p class="hint review-intro">Describe what actually happened this week. This is a snapshot, not a plan.</p>
+          <p class="hint review-intro">
+            Describe what has happened so far this week. This review remains provisional until the week ends.
+          </p>
 
           <form id="review-form" class="split">
             <section class="week-summary">
@@ -109,6 +114,6 @@
     <script>
       window.TRAECT_API_BASE = "";
     </script>
-    <script src="/app.js?v=20260717-timeline-folded" type="module"></script>
+    <script src="/app.js?v=20260717-modules" type="module"></script>
   </body>
 </html>

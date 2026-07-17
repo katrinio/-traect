@@ -11,3 +11,7 @@ class NotFoundError(TraectError):
 
 class ValidationError(TraectError):
     pass
+
+
+class ConflictError(TraectError):
+    pass
