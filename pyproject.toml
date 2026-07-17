@@ -18,7 +18,7 @@ requires = ["poetry-core>=1.9.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-traect = "traect.api.app:main"
+traect = "traect.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

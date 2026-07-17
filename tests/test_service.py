@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -208,6 +209,55 @@ def test_week_rejects_duplicate_domain_states(session: Session) -> None:
                 WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED),
                 WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
             ],
+        )
+
+
+@pytest.mark.parametrize(
+    ("attention", "condition", "message"),
+    [
+        ("unexpected", DomainCondition.STABLE, "invalid attention"),
+        (DomainAttention.MAINTAINED, "unexpected", "invalid condition"),
+    ],
+)
+def test_week_rejects_invalid_runtime_enum_values(
+    session: Session,
+    attention: Any,
+    condition: Any,
+    message: str,
+) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match=message):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    cast(DomainCondition, condition),
+                    cast(DomainAttention, attention),
+                )
+            ],
+        )
+
+
+def test_week_rejects_sacrifice_missing_from_snapshot(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    archived = service.create_domain(workspace.id, "Archived")
+    service.archive_domain(archived.id)
+
+    with pytest.raises(ValidationError, match="present in the weekly Domain snapshot"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            sacrificed_domain_id=archived.id,
+            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
         )
 
 

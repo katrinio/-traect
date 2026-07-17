@@ -38,6 +38,8 @@ Backend разделён по уровню ответственности:
 - `traect/api/routes.py` — сопоставление HTTP routes с application service;
 - `traect/api/serializers.py` — стабильное отображение domain-моделей в API payload;
 - `traect/app/service.py` — транзакционные use cases и правила weekly review;
+- `traect/app/weekly_audit.py` — read-only проверка legacy weekly data и централизованные safe repair-планы;
+- `traect/cli.py` — команды запуска сервера и операционной диагностики;
 - `traect/domain/` — ORM-модель и enums без HTTP-представления.
 
 Frontend использует небольшие нативные ES-модули без framework:

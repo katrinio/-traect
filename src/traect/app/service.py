@@ -177,11 +177,17 @@ class TraectService:
             raise ValidationError("weekly review cannot contain duplicate Domain states")
         if incoming_domain_ids != active_domain_ids or len(states) != len(active_domain_ids):
             raise ValidationError("weekly review must contain one state for each active domain")
+        if any(not isinstance(state.attention, DomainAttention) for state in states):
+            raise ValidationError("weekly review contains an invalid attention value")
+        if any(not isinstance(state.condition, DomainCondition) for state in states):
+            raise ValidationError("weekly review contains an invalid condition value")
 
         focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
         if len(focused_domain_ids) > 1:
             raise ValidationError("only one Domain can have Primary focus attention")
         primary_focus_id = focused_domain_ids[0] if focused_domain_ids else None
+        if sacrificed_domain_id is not None and sacrificed_domain_id not in incoming_domain_ids:
+            raise ValidationError("what gave way must be present in the weekly Domain snapshot")
         if sacrificed_domain_id is not None and primary_focus_id is None:
             raise ValidationError("what gave way requires a main focus")
         if sacrifice_reason is not None and sacrificed_domain_id is None:
