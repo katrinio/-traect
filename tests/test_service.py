@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from traect.api.app import build_app
-from traect.app.database import create_schema
+from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
@@ -319,7 +322,7 @@ def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> No
     assert '"name": "Life"' in current_workspace["body"]
 
 
-def test_root_navigation_exposes_only_current_and_domains(tmp_path: Path) -> None:
+def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) -> None:
     app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
     _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
 
@@ -327,6 +330,7 @@ def test_root_navigation_exposes_only_current_and_domains(tmp_path: Path) -> Non
 
     assert response["status"].startswith("200")
     assert "Current" in response["body"]
+    assert "Timeline" in response["body"]
     assert "Domains" in response["body"]
     assert "Workspace Setup / Domains" not in response["body"]
     assert "Workspace setup" not in response["body"]
@@ -362,10 +366,52 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
     try:
         with verification_engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0003_active_domain_names"
+                "0004_historical_domain_names"
             )
     finally:
         verification_engine.dispose()
+
+
+def test_historical_name_migration_backfills_existing_reviews(tmp_path: Path) -> None:
+    database = tmp_path / "existing.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_ROOT))
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0003_active_domain_names")
+        connection.execute(text("INSERT INTO workspace (id, name) VALUES (1, 'Life')"))
+        connection.execute(
+            text(
+                "INSERT INTO domain (id, workspace_id, name, sort_order) VALUES (1, 1, 'Work', 0), (2, 1, 'Health', 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO week "
+                "(id, workspace_id, iso_year, iso_week, starts_on, ends_on, focus_domain_id, sacrificed_domain_id) "
+                "VALUES (1, 1, 2026, 28, '2026-07-06', '2026-07-12', 1, 2)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO week_domain_state (week_id, domain_id, status, mode) "
+                "VALUES (1, 1, 'good', 'focus'), (1, 2, 'warning', 'ignore')"
+            )
+        )
+
+    migrate_schema(engine)
+
+    with engine.connect() as connection:
+        week_names = connection.execute(
+            text("SELECT focus_domain_name, sacrificed_domain_name FROM week WHERE id = 1")
+        ).one()
+        state_names = (
+            connection.execute(text("SELECT domain_name FROM week_domain_state ORDER BY domain_id")).scalars().all()
+        )
+    engine.dispose()
+    assert week_names == ("Work", "Health")
+    assert state_names == ["Work", "Health"]
 
 
 @pytest.mark.parametrize(
@@ -394,6 +440,64 @@ def test_invalid_week_values_return_json_error(tmp_path: Path) -> None:
 
     assert response["status"].startswith("400")
     assert "error" in response["body"]
+
+
+def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    for iso_year, iso_week in [(2025, week) for week in range(1, 53)] + [(2026, 1)]:
+        service.upsert_week(
+            workspace.id,
+            iso_year,
+            iso_week,
+            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)],
+        )
+
+    history = service.list_weeks(workspace.id)
+
+    assert len(history) == 52
+    assert (history[0].iso_year, history[0].iso_week) == (2026, 1)
+    assert (history[-1].iso_year, history[-1].iso_week) == (2025, 2)
+
+
+def test_history_api_preserves_saved_domain_names_and_membership(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"},{"name":"Health"}]}')
+    saved = _request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/28",
+        body=(
+            b'{"focus_domain_id":1,"sacrificed_domain_id":2,"sacrifice_reason":"Release",'
+            b'"states":[{"domain_id":1,"mode":"focus","status":"good"},'
+            b'{"domain_id":2,"mode":"ignore","status":"warning"}]}'
+        ),
+    )
+    assert saved["status"].startswith("200")
+    _request(app, "PATCH", "/domains/1", body=b'{"name":"Career"}')
+    _request(app, "POST", "/domains/2/archive")
+    _request(app, "POST", "/workspaces/1/domains", body=b'{"name":"Rest"}')
+
+    response = _request(app, "GET", "/workspaces/1/weeks")
+    history = json.loads(response["body"])["items"]
+
+    assert response["status"].startswith("200")
+    assert history[0]["focus_domain_name"] == "Work"
+    assert history[0]["sacrificed_domain_name"] == "Health"
+    assert [item["domain_name"] for item in history[0]["states"]] == ["Work", "Health"]
+    assert all(item["domain_name"] != "Rest" for item in history[0]["states"])
+
+
+def test_viewing_empty_history_does_not_create_a_review(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+
+    first = json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"])
+    second = json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"])
+
+    assert first == {"items": []}
+    assert second == {"items": []}
 
 
 def _request(

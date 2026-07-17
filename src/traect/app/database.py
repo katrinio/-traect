@@ -74,6 +74,7 @@ def detect_legacy_revision(connection: Connection) -> str | None:
 
     domain_columns = {column["name"] for column in inspector.get_columns("domain")}
     week_columns = {column["name"] for column in inspector.get_columns("week")}
+    state_columns = {column["name"] for column in inspector.get_columns("week_domain_state")}
     index_names = {index["name"] for index in inspector.get_indexes("domain")}
     unique_names = {constraint["name"] for constraint in inspector.get_unique_constraints("domain")}
 
@@ -82,6 +83,8 @@ def detect_legacy_revision(connection: Connection) -> str | None:
         "sacrificed_domain_id",
     } <= week_columns
     if is_weekly_schema and "uq_domain_workspace_active_name" in index_names:
+        if "domain_name" in state_columns and {"focus_domain_name", "sacrificed_domain_name"} <= week_columns:
+            return "0004_historical_domain_names"
         if "uq_domain_workspace_name" in unique_names:
             return "0002_weekly_workflow"
         return "0003_active_domain_names"

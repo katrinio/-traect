@@ -78,9 +78,11 @@ class Week(Base):
     focus_domain_id: Mapped[int | None] = mapped_column(
         ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
     )
+    focus_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
     sacrificed_domain_id: Mapped[int | None] = mapped_column(
         ForeignKey("domain.id", ondelete="SET NULL"), nullable=True, default=None
     )
+    sacrificed_domain_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default=None)
     sacrifice_reason: Mapped[str | None] = mapped_column(String(240), nullable=True, default=None)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), init=False, server_default=func.now())
@@ -90,7 +92,7 @@ class Week(Base):
 
     workspace: Mapped[Workspace] = relationship(back_populates="weeks", init=False)
     domain_states: Mapped[list[WeekDomainState]] = relationship(
-        back_populates="week", cascade="all, delete-orphan", default_factory=list
+        back_populates="week", cascade="all, delete-orphan", default_factory=list, order_by="WeekDomainState.id"
     )
     focus_domain: Mapped[Domain | None] = relationship(foreign_keys=[focus_domain_id], init=False, post_update=True)
     sacrificed_domain: Mapped[Domain | None] = relationship(
@@ -105,6 +107,7 @@ class WeekDomainState(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, init=False)
     week_id: Mapped[int] = mapped_column(ForeignKey("week.id", ondelete="CASCADE"), index=True, init=False)
     domain_id: Mapped[int] = mapped_column(ForeignKey("domain.id", ondelete="CASCADE"), index=True, init=False)
+    domain_name: Mapped[str] = mapped_column(String(120))
     status: Mapped[WeekDomainStatus] = mapped_column(
         Enum(WeekDomainStatus, name="week_domain_status", native_enum=False)
     )

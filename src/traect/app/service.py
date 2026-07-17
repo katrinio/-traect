@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from traect.app.errors import NotFoundError, ValidationError
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
@@ -179,19 +179,32 @@ class TraectService:
             raise ValidationError("domain context must be 300 characters or fewer")
 
         week.focus_domain_id = derived_focus_domain_id
+        week.focus_domain_name = (
+            self.get_domain(derived_focus_domain_id).name if derived_focus_domain_id is not None else None
+        )
         week.sacrificed_domain_id = sacrificed_domain_id
+        week.sacrificed_domain_name = (
+            self.get_domain(sacrificed_domain_id).name if sacrificed_domain_id is not None else None
+        )
         week.sacrifice_reason = sacrifice_reason
         week.notes = notes
 
         for state_input in states:
             self._validate_domain_in_workspace(state_input.domain_id, workspace.id)
             current = state_by_domain_id.get(state_input.domain_id)
+            domain_name = self.get_domain(state_input.domain_id).name
             if current is None:
-                state = WeekDomainState(status=state_input.status, mode=state_input.mode, comment=state_input.comment)
+                state = WeekDomainState(
+                    domain_name=domain_name,
+                    status=state_input.status,
+                    mode=state_input.mode,
+                    comment=state_input.comment,
+                )
                 state.week_id = week.id
                 state.domain_id = state_input.domain_id
                 week.domain_states.append(state)
             else:
+                current.domain_name = domain_name
                 current.status = state_input.status
                 current.mode = state_input.mode
                 current.comment = state_input.comment
@@ -209,10 +222,14 @@ class TraectService:
             raise NotFoundError("current week not found")
         return week
 
-    def list_weeks(self, workspace_id: int) -> list[Week]:
+    def list_weeks(self, workspace_id: int, *, limit: int = 52) -> list[Week]:
         workspace = self.get_workspace(workspace_id)
         stmt = (
-            select(Week).where(Week.workspace_id == workspace.id).order_by(Week.iso_year.desc(), Week.iso_week.desc())
+            select(Week)
+            .options(selectinload(Week.domain_states))
+            .where(Week.workspace_id == workspace.id)
+            .order_by(Week.iso_year.desc(), Week.iso_week.desc())
+            .limit(limit)
         )
         return list(self.session.execute(stmt).scalars())
 
