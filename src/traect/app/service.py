@@ -172,30 +172,13 @@ class TraectService:
             ]
 
         state_by_domain_id = {state.domain_id: state for state in week.domain_states}
-        incoming_domain_ids = {state.domain_id for state in states}
-        if len(incoming_domain_ids) != len(states):
-            raise ValidationError("weekly review cannot contain duplicate Domain states")
-        if incoming_domain_ids != active_domain_ids or len(states) != len(active_domain_ids):
-            raise ValidationError("weekly review must contain one state for each active domain")
-        if any(not isinstance(state.attention, DomainAttention) for state in states):
-            raise ValidationError("weekly review contains an invalid attention value")
-        if any(not isinstance(state.condition, DomainCondition) for state in states):
-            raise ValidationError("weekly review contains an invalid condition value")
-
-        focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
-        if len(focused_domain_ids) > 1:
-            raise ValidationError("only one Domain can have Primary focus attention")
-        primary_focus_id = focused_domain_ids[0] if focused_domain_ids else None
-        if sacrificed_domain_id is not None and sacrificed_domain_id not in incoming_domain_ids:
-            raise ValidationError("what gave way must be present in the weekly Domain snapshot")
-        if sacrificed_domain_id is not None and primary_focus_id is None:
-            raise ValidationError("what gave way requires a main focus")
-        if sacrifice_reason is not None and sacrificed_domain_id is None:
-            raise ValidationError("trade-off reason requires a domain that gave way")
-        if primary_focus_id is not None and primary_focus_id == sacrificed_domain_id:
-            raise ValidationError("main focus and what gave way must be different domains")
-        if any(state.comment is not None and len(state.comment) > 300 for state in states):
-            raise ValidationError("domain context must be 300 characters or fewer")
+        self.validate_week_values(
+            states,
+            expected_domain_ids=active_domain_ids,
+            sacrificed_domain_id=sacrificed_domain_id,
+            sacrifice_reason=sacrifice_reason,
+            membership_error="weekly review must contain one state for each active domain",
+        )
 
         week.sacrificed_domain_id = sacrificed_domain_id
         week.sacrificed_domain_name = (
@@ -235,6 +218,41 @@ class TraectService:
 
         self.session.flush()
         return week
+
+    def validate_week_values(
+        self,
+        states: list[WeekStateInput],
+        *,
+        expected_domain_ids: set[int],
+        sacrificed_domain_id: int | None,
+        sacrifice_reason: str | None,
+        membership_error: str,
+    ) -> int | None:
+        incoming_domain_ids = {state.domain_id for state in states}
+        if len(incoming_domain_ids) != len(states):
+            raise ValidationError("weekly review cannot contain duplicate Domain states")
+        if incoming_domain_ids != expected_domain_ids or len(states) != len(expected_domain_ids):
+            raise ValidationError(membership_error)
+        if any(not isinstance(state.attention, DomainAttention) for state in states):
+            raise ValidationError("weekly review contains an invalid attention value")
+        if any(not isinstance(state.condition, DomainCondition) for state in states):
+            raise ValidationError("weekly review contains an invalid condition value")
+
+        focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
+        if len(focused_domain_ids) > 1:
+            raise ValidationError("only one Domain can have Primary focus attention")
+        primary_focus_id = focused_domain_ids[0] if focused_domain_ids else None
+        if sacrificed_domain_id is not None and sacrificed_domain_id not in incoming_domain_ids:
+            raise ValidationError("what gave way must be present in the weekly Domain snapshot")
+        if sacrificed_domain_id is not None and primary_focus_id is None:
+            raise ValidationError("what gave way requires a main focus")
+        if sacrifice_reason is not None and sacrificed_domain_id is None:
+            raise ValidationError("trade-off reason requires a domain that gave way")
+        if primary_focus_id is not None and primary_focus_id == sacrificed_domain_id:
+            raise ValidationError("main focus and what gave way must be different domains")
+        if any(state.comment is not None and len(state.comment) > 300 for state in states):
+            raise ValidationError("domain context must be 300 characters or fewer")
+        return primary_focus_id
 
     def get_current_week(self, workspace_id: int) -> Week:
         week = self.get_current_week_optional(workspace_id)

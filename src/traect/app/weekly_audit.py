@@ -221,20 +221,7 @@ def audit_weekly_data(
     logger.info("weekly data audit started")
 
     with engine.connect() as connection:
-        scan = _scan(connection, audit_scope, audited_at.date())
-
-    report = WeeklyAuditReport(
-        audited_at=audited_at,
-        database_scope={
-            "dialect": engine.dialect.name,
-            "workspace_id": audit_scope.workspace_id,
-            "iso_year": audit_scope.iso_year,
-            "iso_week": audit_scope.iso_week,
-        },
-        total_weeks_inspected=scan.total_weeks,
-        total_states_inspected=scan.total_states,
-        issues=scan.issues,
-    )
+        report, scan = _audit_in_connection(connection, audit_scope, audited_at)
     if fix_safe:
         report.repairs.extend(_apply_repairs(engine, audit_scope, audited_at.date(), scan.actions))
     else:
@@ -249,6 +236,41 @@ def audit_weekly_data(
         report.unresolved_manual_review,
     )
     return report
+
+
+def audit_weekly_data_in_connection(
+    connection: Connection,
+    *,
+    scope: AuditScope,
+    audited_at: datetime,
+) -> WeeklyAuditReport:
+    """Run the read-only audit inside an existing transaction."""
+    report, scan = _audit_in_connection(connection, scope, audited_at)
+    report.repairs.extend(_proposed_results(scan.actions))
+    return report
+
+
+def _audit_in_connection(
+    connection: Connection,
+    scope: AuditScope,
+    audited_at: datetime,
+) -> tuple[WeeklyAuditReport, _ScanResult]:
+    if audited_at.tzinfo is None:
+        audited_at = audited_at.replace(tzinfo=UTC)
+    scan = _scan(connection, scope, audited_at.date())
+    report = WeeklyAuditReport(
+        audited_at=audited_at,
+        database_scope={
+            "dialect": connection.dialect.name,
+            "workspace_id": scope.workspace_id,
+            "iso_year": scope.iso_year,
+            "iso_week": scope.iso_week,
+        },
+        total_weeks_inspected=scan.total_weeks,
+        total_states_inspected=scan.total_states,
+        issues=scan.issues,
+    )
+    return report, scan
 
 
 def _load_schema(connection: Connection) -> _Schema | None:
