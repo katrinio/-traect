@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import date
 from typing import Any
+
+from traect.app.history import week_reference, weeks_are_consecutive
 
 
 def calculate_paused_streaks(
@@ -22,7 +23,7 @@ def calculate_paused_streaks(
             current = []
 
     for week in weeks:
-        follows_previous = bool(current) and _weeks_are_consecutive(current[-1], week)
+        follows_previous = bool(current) and weeks_are_consecutive(current[-1], week)
         explicitly_paused = week["attention_presence"] == "recorded" and week["attention"] == "paused"
         if not explicitly_paused:
             close_streak()
@@ -58,7 +59,7 @@ def calculate_paused_streaks(
 
 
 def _streak(weeks: Sequence[Mapping[str, Any]], current_iso_week: tuple[int, int]) -> dict[str, Any]:
-    references = [_week_reference(week) for week in weeks]
+    references = [week_reference(week) for week in weeks]
     last = references[-1]
     return {
         "length": len(references),
@@ -67,13 +68,3 @@ def _streak(weeks: Sequence[Mapping[str, Any]], current_iso_week: tuple[int, int
         "active": (last["iso_year"], last["iso_week"]) == current_iso_week,
         "weeks": references,
     }
-
-
-def _weeks_are_consecutive(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
-    first_date = date.fromisocalendar(int(first["iso_year"]), int(first["iso_week"]), 1)
-    second_date = date.fromisocalendar(int(second["iso_year"]), int(second["iso_week"]), 1)
-    return (second_date - first_date).days == 7
-
-
-def _week_reference(week: Mapping[str, Any]) -> dict[str, int]:
-    return {"week_id": int(week["week_id"]), "iso_year": int(week["iso_year"]), "iso_week": int(week["iso_week"])}

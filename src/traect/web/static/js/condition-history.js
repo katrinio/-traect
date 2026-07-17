@@ -1,4 +1,10 @@
-import { conditionPresentation, setStatus } from "/js/presentation.js";
+import {
+  conditionPresentation,
+  createTimelineWeekLink,
+  formatPercentage,
+  formatWeekLabel,
+  setStatus,
+} from "/js/presentation.js";
 
 export function mapConditionHistory(payload) {
   if (!payload || !payload.range || !Array.isArray(payload.domains) || !payload.integrity) {
@@ -123,7 +129,7 @@ function renderLatest(latest) {
   heading.textContent = "Most recent record";
   const value = document.createElement("p");
   if (latest) {
-    value.textContent = `${conditionPresentation[latest.condition].label} · Week ${latest.iso_week}, ${latest.iso_year}`;
+    value.textContent = `${conditionPresentation[latest.condition].label} · ${formatWeekLabel(latest)}`;
     if (latest.lifecycle === "provisional") value.append(" · Provisional");
   } else value.textContent = "No recorded Condition in this period.";
   section.append(heading, value);
@@ -222,7 +228,7 @@ function renderPausedSequences(sequences) {
     renderPausedSummary(
       "Current paused sequence",
       sequences.current_streak.active
-        ? `${formatReviewedWeeks(sequences.current_streak.length)} · Started Week ${sequences.current_streak.started.iso_week}, ${sequences.current_streak.started.iso_year}`
+        ? `${formatReviewedWeeks(sequences.current_streak.length)} · Started ${formatWeekLabel(sequences.current_streak.started)}`
         : "No active paused sequence",
     ),
     renderPausedSummary(
@@ -267,15 +273,10 @@ function renderPausedStreak(streak) {
   const weeks = document.createElement("ul");
   for (const week of streak.weeks) {
     const weekItem = document.createElement("li");
-    const link = document.createElement("a");
-    link.href = `#timeline-week-${week.week_id}`;
-    link.setAttribute("aria-label", `Open paused sequence review for Week ${week.iso_week}, ${week.iso_year}`);
-    link.textContent = `Week ${week.iso_week}, ${week.iso_year} · Paused`;
-    link.addEventListener("click", () => {
-      const target = document.getElementById(`timeline-week-${week.week_id}`);
-      if (target instanceof HTMLDetailsElement) target.open = true;
-    });
-    weekItem.appendChild(link);
+    weekItem.appendChild(createTimelineWeekLink(week, {
+      text: `${formatWeekLabel(week)} · Paused`,
+      ariaLabel: `Open paused sequence review for ${formatWeekLabel(week)}`,
+    }));
     weeks.appendChild(weekItem);
   }
   item.append(heading, weeks);
@@ -283,8 +284,8 @@ function renderPausedStreak(streak) {
 }
 
 function formatWeekRange(streak) {
-  const started = `Week ${streak.started.iso_week}, ${streak.started.iso_year}`;
-  const ended = `Week ${streak.ended.iso_week}, ${streak.ended.iso_year}`;
+  const started = formatWeekLabel(streak.started);
+  const ended = formatWeekLabel(streak.ended);
   return started === ended ? started : `${started} → ${ended}`;
 }
 
@@ -295,13 +296,9 @@ function formatReviewedWeeks(count) {
 function renderWeek(week) {
   const item = document.createElement("li");
   item.className = `condition-week condition-week-${week.presence}`;
-  const link = document.createElement("a");
-  link.href = `#timeline-week-${week.week_id}`;
-  link.setAttribute("aria-label", `Open saved review for Week ${week.iso_week}, ${week.iso_year}`);
-  link.textContent = `Week ${week.iso_week}, ${week.iso_year}`;
-  link.addEventListener("click", () => {
-    const target = document.getElementById(`timeline-week-${week.week_id}`);
-    if (target instanceof HTMLDetailsElement) target.open = true;
+  const link = createTimelineWeekLink(week, {
+    text: formatWeekLabel(week),
+    ariaLabel: `Open saved review for ${formatWeekLabel(week)}`,
   });
   const value = document.createElement("span");
   if (week.presence === "recorded") {
@@ -374,8 +371,4 @@ function renderIntegrityNotice(count, subject) {
   notice.setAttribute("role", "status");
   notice.textContent = `${count} ${subject}${count === 1 ? " was" : "s were"} excluded because historical data is inconsistent.`;
   return notice;
-}
-
-function formatPercentage(share) {
-  return `${Math.round(Number(share) * 100)}%`;
 }

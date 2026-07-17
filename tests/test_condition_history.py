@@ -241,11 +241,43 @@ def test_conflicting_duplicate_and_missing_reference_integrity_handling() -> Non
     )
 
     history = payload["history"]
-    assert history["domain"]["name"] == "Unavailable Domain"
+    assert history["domain"]["name"] == "Gone"
+    assert history["domain"]["name_source"] == "snapshot"
     assert history["domain"]["unavailable"] is True
     assert [week["presence"] for week in history["weeks"]] == ["recorded", "excluded", "absent"]
     assert history["summary"]["excluded_state_count"] == 1
     assert history["excluded_reasons"] == {"duplicate_domain_state": 1}
+
+
+def test_condition_history_domain_identity_fallback_rules() -> None:
+    payload = ConditionHistoryService._aggregate_rows(
+        week_rows=[
+            {"id": 3, "iso_year": 2026, "iso_week": 3},
+            {"id": 2, "iso_year": 2026, "iso_week": 2},
+            {"id": 1, "iso_year": 2026, "iso_week": 1},
+        ],
+        state_rows=[
+            {"id": 1, "week_id": 3, "domain_id": 1, "domain_name": "", "condition": "stable"},
+            {"id": 2, "week_id": 2, "domain_id": 9, "domain_name": "Ghost", "condition": "stable"},
+            {"id": 3, "week_id": 1, "domain_id": 8, "domain_name": " ", "condition": "stable"},
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": None}],
+        current_iso_week=(2026, 3),
+        reviewed_weeks=None,
+        domain_id=1,
+    )
+
+    domains = {domain["domain_id"]: domain for domain in payload["domains"]}
+    assert domains[1]["name"] == "Work"
+    assert domains[1]["name_source"] == "current_domain"
+    assert domains[1]["unavailable"] is False
+    assert domains[9]["name"] == "Ghost"
+    assert domains[9]["name_source"] == "snapshot"
+    assert domains[9]["unavailable"] is True
+    assert domains[8]["name"] == "Unavailable Domain"
+    assert domains[8]["name_source"] == "fallback"
+    assert domains[8]["unavailable"] is True
+    assert payload["history"]["domain"]["name"] == "Work"
 
 
 def test_duplicate_week_is_not_counted_twice() -> None:

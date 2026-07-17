@@ -11,7 +11,8 @@ from traect.api.serializers import (
 )
 from traect.app.condition_history import ConditionHistoryService
 from traect.app.errors import NotFoundError, ValidationError
-from traect.app.focus_history import FocusHistoryService, parse_focus_history_range
+from traect.app.focus_history import FocusHistoryService
+from traect.app.history import parse_reviewed_week_range
 from traect.app.service import UNSET, TraectService, WeekStateInput
 from traect.app.tradeoff_history import TradeoffHistoryService
 from traect.domain.enums import DomainAttention, DomainCondition
@@ -78,7 +79,7 @@ def dispatch(
         range_values = query.get("reviewed_weeks", [])
         if len(range_values) > 1:
             raise ValidationError("reviewed_weeks must be provided once")
-        reviewed_weeks = parse_focus_history_range(range_values[0] if range_values else None)
+        reviewed_weeks = parse_reviewed_week_range(range_values[0] if range_values else None)
         service.get_workspace(int(parts[1]))
         return FocusHistoryService(service.session).aggregate(
             int(parts[1]),
@@ -90,7 +91,7 @@ def dispatch(
         domain_values = query.get("domain_id", [])
         if len(range_values) > 1 or len(domain_values) > 1:
             raise ValidationError("history query parameters must be provided once")
-        reviewed_weeks = parse_focus_history_range(range_values[0] if range_values else None)
+        reviewed_weeks = parse_reviewed_week_range(range_values[0] if range_values else None)
         try:
             domain_id = int(domain_values[0]) if domain_values else None
         except ValueError as exc:
@@ -109,7 +110,7 @@ def dispatch(
         if any(len(query.get(key, [])) > 1 for key in allowed):
             raise ValidationError("history query parameters must be provided once")
         reviewed_values = query.get("reviewed_weeks", [])
-        reviewed_weeks = parse_focus_history_range(reviewed_values[0] if reviewed_values else None)
+        reviewed_weeks = parse_reviewed_week_range(reviewed_values[0] if reviewed_values else None)
         focus_domain_id = _optional_query_integer(query, "focus_domain_id")
         sacrifice_domain_id = _optional_query_integer(query, "sacrifice_domain_id")
         service.get_workspace(int(parts[1]))

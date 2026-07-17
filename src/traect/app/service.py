@@ -206,6 +206,11 @@ class TraectService:
         active_domains_by_id = {domain.id: domain for domain in active_domains}
         active_domain_ids = set(active_domains_by_id)
         if states is None:
+            # A save without explicit states seeds one neutral state per active
+            # Domain: MAINTAINED attention (no Primary focus asserted) and
+            # AT_RISK condition. These are deliberately non-committal defaults,
+            # not a claim about the week — a caller that omits states is creating
+            # the Week shell, not recording judgements about each Domain.
             states = [
                 WeekStateInput(
                     domain_id=domain_id,
@@ -231,6 +236,14 @@ class TraectService:
         week.sacrifice_reason = sacrifice_reason
         week.notes = notes
 
+        # Primary focus is enforced by a partial unique index (one primary_focus
+        # row per Week). Moving focus from Domain A to Domain B must therefore
+        # happen in two flushed steps: first demote any previously saved
+        # primary_focus row that is no longer primary_focus in the incoming
+        # states, then flush so the old row is gone before the loop below writes
+        # the new one. Merging these into a single pass would momentarily leave
+        # two primary_focus rows in the Week and violate the index — do not
+        # "simplify" the intermediate flush away.
         input_by_domain_id = {state.domain_id: state for state in states}
         for saved_state in week.domain_states:
             desired_state = input_by_domain_id.get(saved_state.domain_id)
@@ -273,7 +286,7 @@ class TraectService:
         sacrificed_domain_id: int | None,
         sacrifice_reason: str | None,
         membership_error: str,
-    ) -> int | None:
+    ) -> None:
         incoming_domain_ids = {state.domain_id for state in states}
         if len(incoming_domain_ids) != len(states):
             raise ValidationError("weekly review cannot contain duplicate Domain states")
@@ -298,7 +311,6 @@ class TraectService:
             raise ValidationError("main focus and what gave way must be different domains")
         if any(state.comment is not None and len(state.comment) > 300 for state in states):
             raise ValidationError("domain context must be 300 characters or fewer")
-        return primary_focus_id
 
     def get_current_week(self, workspace_id: int) -> Week:
         week = self.get_current_week_optional(workspace_id)

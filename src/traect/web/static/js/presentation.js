@@ -71,3 +71,26 @@ export function escapeHtml(value) {
     "'": "&#39;",
   })[char]);
 }
+
+export function formatPercentage(share) {
+  return `${Math.round(Number(share) * 100)}%`;
+}
+
+export function formatWeekLabel(week) {
+  return `Week ${week.iso_week}, ${week.iso_year}`;
+}
+
+// Build an anchor to a saved week in the Timeline that expands its <details>
+// entry on click. Every history view links back to the same Timeline anchors,
+// so the href scheme and the expand-on-click behaviour live here once.
+export function createTimelineWeekLink(week, { text, ariaLabel }) {
+  const link = document.createElement("a");
+  link.href = `#timeline-week-${week.week_id}`;
+  if (ariaLabel) link.setAttribute("aria-label", ariaLabel);
+  link.textContent = text;
+  link.addEventListener("click", () => {
+    const target = document.getElementById(`timeline-week-${week.week_id}`);
+    if (target instanceof HTMLDetailsElement) target.open = true;
+  });
+  return link;
+}

@@ -2,15 +2,21 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
-from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from traect.app.errors import NotFoundError
-from traect.app.history import load_history_rows
+from traect.app.history import (
+    CANONICAL_ATTENTION_VALUES,
+    load_history_rows,
+    resolve_domain_identity,
+    review_lifecycle,
+    week_reference,
+    weeks_are_consecutive,
+)
+from traect.app.issue_codes import WeeklyIssueCode
 from traect.app.paused_streaks import calculate_paused_streaks
-from traect.app.weekly_audit import WeeklyIssueCode
 
 CONDITION_LABELS = {"stable": "Stable", "at_risk": "At risk", "critical": "Critical"}
 
@@ -92,14 +98,14 @@ class ConditionHistoryService:
             if not is_active and not valid_states:
                 continue
             latest = valid_states[0] if valid_states else None
-            unavailable = metadata is None
-            name = _domain_name(metadata, latest[1] if latest else None)
+            identity = resolve_domain_identity(metadata, latest[1]["domain_name"] if latest else None)
             domain_index.append(
                 {
                     "domain_id": candidate_id,
-                    "name": name,
-                    "archived": metadata is not None and metadata["archived_at"] is not None,
-                    "unavailable": unavailable,
+                    "name": identity["name"],
+                    "name_source": identity["name_source"],
+                    "archived": identity["archived"],
+                    "unavailable": identity["unavailable"],
                     "recorded_state_count": len(valid_states),
                     "latest_record": _latest_record(latest, current_iso_week),
                     "sort_order": int(metadata["sort_order"]) if metadata is not None else 2**31,
@@ -178,20 +184,13 @@ def _classify_attention_states(states: Sequence[Any]) -> dict[str, Any]:
             "reason": WeeklyIssueCode.DUPLICATE_DOMAIN_STATE.value,
         }
     attention = str(states[0].get("attention", ""))
-    if attention not in {"primary_focus", "maintained", "paused"}:
+    if attention not in CANONICAL_ATTENTION_VALUES:
         return {
             "presence": "excluded",
             "attention": None,
             "reason": WeeklyIssueCode.INVALID_ATTENTION.value,
         }
     return {"presence": "recorded", "attention": attention, "reason": None}
-
-
-def _domain_name(metadata: Mapping[str, Any] | None, state: Mapping[str, Any] | None) -> str:
-    if metadata is None:
-        return "Unavailable Domain"
-    historical_name = str(state["domain_name"]).strip() if state is not None else ""
-    return historical_name or str(metadata["name"])
 
 
 def _latest_record(
@@ -211,7 +210,7 @@ def _record_reference(week: Mapping[str, Any], condition: str, current_iso_week:
         "week_id": int(week["id"]),
         "iso_year": iso_year,
         "iso_week": iso_week,
-        "lifecycle": "provisional" if (iso_year, iso_week) == current_iso_week else "final",
+        "lifecycle": review_lifecycle(iso_year, iso_week, current_iso_week),
         "condition": condition,
     }
 
@@ -235,7 +234,7 @@ def _build_domain_history(
             "week_id": int(week["id"]),
             "iso_year": iso_year,
             "iso_week": iso_week,
-            "lifecycle": "provisional" if (iso_year, iso_week) == current_iso_week else "final",
+            "lifecycle": review_lifecycle(iso_year, iso_week, current_iso_week),
             "presence": classification["presence"],
             "condition": classification["condition"],
             "excluded_reason": classification["reason"],
@@ -294,7 +293,7 @@ def _transitions_and_runs(weeks: Sequence[Mapping[str, Any]]) -> tuple[list[dict
     previous: Mapping[str, Any] | None = None
     current_run: dict[str, Any] | None = None
     for week in weeks:
-        consecutive = previous is not None and _weeks_are_consecutive(previous, week)
+        consecutive = previous is not None and weeks_are_consecutive(previous, week)
         if week["presence"] != "recorded" or not consecutive:
             if current_run is not None:
                 runs.append(current_run)
@@ -308,8 +307,8 @@ def _transitions_and_runs(weeks: Sequence[Mapping[str, Any]]) -> tuple[list[dict
                 {
                     "from": previous["condition"],
                     "to": week["condition"],
-                    "from_week": _week_reference(previous),
-                    "to_week": _week_reference(week),
+                    "from_week": week_reference(previous),
+                    "to_week": week_reference(week),
                 }
             )
             if current_run is not None:
@@ -317,26 +316,16 @@ def _transitions_and_runs(weeks: Sequence[Mapping[str, Any]]) -> tuple[list[dict
             current_run = _start_run(week)
         elif current_run is not None:
             current_run["count"] += 1
-            current_run["to_week"] = _week_reference(week)
+            current_run["to_week"] = week_reference(week)
         previous = week
     if current_run is not None:
         runs.append(current_run)
     return transitions, runs
 
 
-def _weeks_are_consecutive(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
-    first_date = date.fromisocalendar(int(first["iso_year"]), int(first["iso_week"]), 1)
-    second_date = date.fromisocalendar(int(second["iso_year"]), int(second["iso_week"]), 1)
-    return (second_date - first_date).days == 7
-
-
 def _start_run(week: Mapping[str, Any]) -> dict[str, Any]:
-    reference = _week_reference(week)
+    reference = week_reference(week)
     return {"condition": week["condition"], "count": 1, "from_week": reference, "to_week": reference}
-
-
-def _week_reference(week: Mapping[str, Any]) -> dict[str, int]:
-    return {"week_id": int(week["week_id"]), "iso_year": int(week["iso_year"]), "iso_week": int(week["iso_week"])}
 
 
 def _build_observations(name: str, summary: Mapping[str, Any]) -> list[dict[str, str]]:

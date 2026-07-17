@@ -48,7 +48,7 @@ Primary focus представлен исключительно строкой `
 
 Focus history не имеет отдельной таблицы и не хранит кэшированные счётчики. Read-only service выполняет ограниченную агрегацию сохранённых `week` и `week_domain_state`, используя только `attention = primary_focus`. Для последних 12, 26 и 52 выбираются валидные persisted reviews, а не непрерывный календарный диапазон; `all` использует всю валидную историю до текущей ISO-недели.
 
-Недели без focus входят в reviewed-week denominator. Duplicate Week, duplicate Domain state, неизвестный attention и несколько Primary focus исключаются и возвращаются как integrity metadata. Историческая группировка использует Domain ID; архивность берётся из текущей Domain metadata, а имя — из самого свежего focus snapshot. Отсутствующая Domain reference сохраняет событие под стабильным ID и нейтральным именем `Unavailable Domain`.
+Недели без focus входят в reviewed-week denominator. Duplicate Week, duplicate Domain state, неизвестный attention и несколько Primary focus исключаются и возвращаются как integrity metadata. Историческая группировка использует Domain ID; архивность берётся из текущей Domain metadata, а имя — из самого свежего focus snapshot. Отсутствующая Domain reference сохраняет событие под стабильным ID: непустое snapshot-имя показывается как записано, а нейтральное имя `Unavailable Domain` используется только когда нет ни snapshot-имени, ни ссылки. Пустое snapshot-имя при валидной ссылке заменяется текущим именем Domain; источник имени всегда помечен полем `name_source` (`snapshot`, `current_domain`, `fallback`).
 
 ## Condition history
 
@@ -56,7 +56,7 @@ Condition history использует ту же функцию range parsing и
 
 Для выбранного Domain каждая валидная review-неделя получает machine-readable presence: `recorded`, `absent` или `excluded`. Condition shares делятся на число валидных `recorded` states; coverage делится на число reviews и отдельно показывает snapshots с отсутствующим Domain. Duplicate Week исключается из reviewed range, conflicting duplicate state и неизвестный Condition остаются в sequence как `excluded` с кодом центрального weekly audit.
 
-Историческое имя берётся из самого свежего валидного Domain-state snapshot в диапазоне. Архивность берётся из текущей Domain metadata. Состояние с отсутствующей Domain reference остаётся доступным под исходным ID и fallback-именем `Unavailable Domain`.
+Историческое имя берётся из самого свежего валидного Domain-state snapshot в диапазоне. Архивность берётся из текущей Domain metadata. Состояние с отсутствующей Domain reference остаётся доступным под исходным ID: непустое snapshot-имя сохраняется, `Unavailable Domain` используется только при отсутствии и имени, и ссылки, а пустое имя при валидной ссылке заменяется текущим именем Domain. Источник имени помечен полем `name_source` (`snapshot`, `current_domain`, `fallback`) — правила общие для всех history-функций.
 
 ## Paused sequences
 

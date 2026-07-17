@@ -212,8 +212,38 @@ def test_integrity_exclusions_and_missing_domain_fallback_are_deterministic() ->
         "excluded_week_count": 2,
     }
     assert history["excluded_reasons"] == {"duplicate_week": 1, "multiple_primary_focus": 1}
-    assert history["domains"][0]["name"] == "Unavailable Domain"
+    assert history["domains"][0]["name"] == "Ghost"
+    assert history["domains"][0]["name_source"] == "snapshot"
     assert history["domains"][0]["unavailable"] is True
+
+
+def test_focus_history_domain_identity_fallback_rules() -> None:
+    history = FocusHistoryService._aggregate_rows(
+        week_rows=[
+            {"id": 3, "iso_year": 2026, "iso_week": 3},
+            {"id": 2, "iso_year": 2026, "iso_week": 2},
+            {"id": 1, "iso_year": 2026, "iso_week": 1},
+        ],
+        state_rows=[
+            {"id": 1, "week_id": 3, "domain_id": 1, "domain_name": "", "attention": "primary_focus"},
+            {"id": 2, "week_id": 2, "domain_id": 9, "domain_name": "Ghost", "attention": "primary_focus"},
+            {"id": 3, "week_id": 1, "domain_id": 8, "domain_name": " ", "attention": "primary_focus"},
+        ],
+        domain_rows=[{"id": 1, "name": "Work", "sort_order": 1, "archived_at": None}],
+        current_iso_week=(2026, 3),
+        reviewed_weeks=None,
+    )
+
+    domains = {domain["domain_id"]: domain for domain in history["domains"]}
+    assert domains[1]["name"] == "Work"
+    assert domains[1]["name_source"] == "current_domain"
+    assert domains[1]["unavailable"] is False
+    assert domains[9]["name"] == "Ghost"
+    assert domains[9]["name_source"] == "snapshot"
+    assert domains[9]["unavailable"] is True
+    assert domains[8]["name"] == "Unavailable Domain"
+    assert domains[8]["name_source"] == "fallback"
+    assert domains[8]["unavailable"] is True
 
 
 def test_focus_history_uses_three_bounded_queries(session: Session) -> None:
@@ -265,7 +295,7 @@ def test_focus_history_api_shape_ranges_and_week_references(tmp_path: Path) -> N
         "iso_year": 2026,
         "iso_week": 29,
         "lifecycle": "provisional",
-        "focus": {"domain_id": 1, "name": "Work", "unavailable": False},
+        "focus": {"domain_id": 1, "name": "Work", "archived": False, "unavailable": False, "name_source": "snapshot"},
     }
 
     invalid = request(app, "GET", "/workspaces/1/history/focus?reviewed_weeks=10")
