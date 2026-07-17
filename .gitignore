@@ -218,3 +218,6 @@ __marimo__/
 .streamlit/secrets.toml
 /traect.db
 /BACKLOG.md
+.env
+data/*
+!data/.gitkeep

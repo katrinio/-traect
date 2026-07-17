@@ -63,6 +63,11 @@ Backend предоставляет небольшой набор HTTP-эндпо
 - `GET /workspaces/{workspace_id}/history/focus?reviewed_weeks=12|26|52|all`
 - `GET /workspaces/{workspace_id}/history/condition?domain_id={domain_id}&reviewed_weeks=12|26|52|all`
 - `GET /workspaces/{workspace_id}/history/trade-offs?reviewed_weeks=12|26|52|all`
+- `GET /health`
+
+## Docker deployment
+
+Сервер читает `TRAECT_HOST` (по умолчанию `127.0.0.1`) и `TRAECT_PORT` (по умолчанию `8000`). Production compose передаёт `0.0.0.0:8000` внутри контейнера, но публикует сервис только на `127.0.0.1:8012` для reverse proxy. SQLite-файл хранится в bind-mounted `./data` как `/app/data/traect.db`; production timezone — `Europe/Belgrade`.
 
 ## Поток экранов
 

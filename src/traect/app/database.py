@@ -64,7 +64,12 @@ def detect_legacy_revision(connection: Connection) -> str | None:
     if "alembic_version" in tables:
         versions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
         if versions:
-            return None
+            if versions == ["0008_minimum_acceptable_level"]:
+                return None
+            raise RuntimeError(
+                "database uses a Traect migration revision that predates the squashed baseline; "
+                "upgrade it with the previous release before deploying this version"
+            )
 
     existing_app_tables = tables & APP_TABLES
     if not existing_app_tables:
@@ -76,43 +81,31 @@ def detect_legacy_revision(connection: Connection) -> str | None:
     week_columns = {column["name"] for column in inspector.get_columns("week")}
     state_columns = {column["name"] for column in inspector.get_columns("week_domain_state")}
     index_names = {index["name"] for index in inspector.get_indexes("domain")}
-    unique_names = {constraint["name"] for constraint in inspector.get_unique_constraints("domain")}
 
-    is_weekly_schema = {"sort_order", "archived_at"} <= domain_columns and "sacrificed_domain_id" in week_columns
-    if is_weekly_schema and "uq_domain_workspace_active_name" in index_names:
-        if (
-            "domain_name" in state_columns
-            and "sacrificed_domain_name" in week_columns
-            and {"attention", "condition"} <= state_columns
-            and {"focus_domain_id", "focus_domain_name"}.isdisjoint(week_columns)
-        ):
-            if {"corrected_at", "correction_note", "revision"} <= week_columns:
-                if (
-                    "minimum_acceptable_level" in domain_columns
-                    and "minimum_acceptable_level_snapshot" in state_columns
-                ):
-                    return "0008_minimum_acceptable_level"
-                return "0007_historical_week_corrections"
-            return "0006_canonical_focus_source"
-        if "domain_name" in state_columns and {"focus_domain_name", "sacrificed_domain_name"} <= week_columns:
-            if {"attention", "condition"} <= state_columns:
-                return "0005_unify_product_terminology"
-            return "0004_historical_domain_names"
-        if "uq_domain_workspace_name" in unique_names:
-            return "0002_weekly_workflow"
-        return "0003_active_domain_names"
-
-    is_initial_schema = (
-        "sort_order" not in domain_columns
+    is_squashed_schema = (
+        {"sort_order", "archived_at", "minimum_acceptable_level"} <= domain_columns
         and {
-            "focus_domain_name",
+            "sacrificed_domain_id",
             "sacrificed_domain_name",
+            "corrected_at",
+            "correction_note",
+            "revision",
         }
         <= week_columns
+        and {
+            "domain_name",
+            "attention",
+            "condition",
+            "minimum_acceptable_level_snapshot",
+        }
+        <= state_columns
+        and {"focus_domain_id", "focus_domain_name"}.isdisjoint(week_columns)
+        and "uq_domain_workspace_active_name" in index_names
     )
-    if is_initial_schema:
-        return "0001_initial_schema"
+    if is_squashed_schema:
+        return "0008_minimum_acceptable_level"
 
     raise RuntimeError(
-        "database schema does not match a known legacy traect revision; migration cannot continue safely"
+        "database schema predates the squashed Traect migration baseline; "
+        "upgrade it with the previous release before deploying this version"
     )

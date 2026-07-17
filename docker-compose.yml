@@ -1,0 +1,24 @@
+services:
+  traect:
+    image: ghcr.io/katrinio/traect:latest
+    container_name: traect
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8012:8000"
+    environment:
+      TRAECT_HOST: 0.0.0.0
+      TRAECT_PORT: 8000
+      TRAECT_DATABASE_URL: sqlite:////app/data/traect.db
+      TRAECT_TIMEZONE: Europe/Belgrade
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health').read()"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

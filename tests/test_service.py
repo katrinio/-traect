@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from tests.support import MutableClock, week_clock
 from tests.support import wsgi_request as _request
-from traect.api.app import build_app
+from traect.api.app import build_app, server_address_from_environment
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
@@ -45,6 +46,41 @@ def test_canonical_enums_and_model_fields() -> None:
     assert "status" not in WeekDomainState.__table__.columns
     assert "focus_domain_id" not in Week.__table__.columns
     assert "focus_domain_name" not in Week.__table__.columns
+
+
+def test_health_endpoint_is_available_without_workspace(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'health.db'}")
+
+    response = _request(app, "GET", "/health")
+
+    assert response["status"].startswith("200")
+    assert json.loads(response["body"]) == {"status": "ok"}
+
+
+def test_health_endpoint_reports_unavailable_database(tmp_path: Path) -> None:
+    database_dir = tmp_path / "database"
+    database_dir.mkdir()
+    app = build_app(f"sqlite:///{database_dir / 'health.db'}")
+    shutil.rmtree(database_dir)
+
+    response = _request(app, "GET", "/health")
+
+    assert response["status"].startswith("503")
+    assert json.loads(response["body"]) == {"status": "unavailable"}
+
+
+def test_server_address_uses_environment_and_rejects_invalid_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRAECT_HOST", raising=False)
+    monkeypatch.delenv("TRAECT_PORT", raising=False)
+    assert server_address_from_environment() == ("127.0.0.1", 8000)
+
+    monkeypatch.setenv("TRAECT_HOST", "0.0.0.0")
+    monkeypatch.setenv("TRAECT_PORT", "9876")
+    assert server_address_from_environment() == ("0.0.0.0", 9876)
+
+    monkeypatch.setenv("TRAECT_PORT", "invalid")
+    with pytest.raises(ValueError, match="TRAECT_PORT"):
+        server_address_from_environment()
 
 
 def test_create_and_list_domains(session: Session) -> None:
@@ -502,6 +538,41 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
         verification_engine.dispose()
 
 
+def test_squashed_migration_creates_the_current_schema(tmp_path: Path) -> None:
+    database = tmp_path / "fresh.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    migrate_schema(engine)
+
+    with engine.connect() as connection:
+        tables = set(inspect(connection).get_table_names())
+        domain_columns = {column["name"] for column in inspect(connection).get_columns("domain")}
+        week_columns = {column["name"] for column in inspect(connection).get_columns("week")}
+        state_columns = {column["name"] for column in inspect(connection).get_columns("week_domain_state")}
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+
+    assert {"workspace", "domain", "week", "week_domain_state"} <= tables
+    assert "minimum_acceptable_level" in domain_columns
+    assert "focus_domain_id" not in week_columns
+    assert {"attention", "condition", "minimum_acceptable_level_snapshot"} <= state_columns
+    assert revision == "0008_minimum_acceptable_level"
+
+
+def test_squashed_migration_rejects_a_database_on_the_previous_chain(tmp_path: Path) -> None:
+    database = tmp_path / "previous-chain.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES ('0007_historical_week_corrections')")
+        )
+
+    with pytest.raises(RuntimeError, match="predates the squashed baseline"):
+        migrate_schema(engine)
+    engine.dispose()
+
+
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_historical_name_migration_backfills_existing_reviews(tmp_path: Path) -> None:
     database = tmp_path / "existing.db"
     engine = create_engine(f"sqlite:///{database}", future=True)
@@ -605,6 +676,7 @@ def _focus_migration_database(
         (None, {1: "maintained", 2: "paused"}, [(1, "maintained"), (2, "paused")]),
     ],
 )
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_preserves_or_repairs_unambiguous_history(
     tmp_path: Path,
     focus_domain_id: int | None,
@@ -641,6 +713,7 @@ def test_focus_source_migration_preserves_or_repairs_unambiguous_history(
         ({1: "primary_focus", 2: "primary_focus"}, "multiple Primary focus states in weeks [1]"),
     ],
 )
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_reports_ambiguous_history(
     tmp_path: Path,
     attentions: dict[int, str],
@@ -661,6 +734,7 @@ def test_focus_source_migration_reports_ambiguous_history(
     assert {"focus_domain_id", "focus_domain_name"} <= week_columns
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_focus_source_migration_downgrade_derives_legacy_fields(tmp_path: Path) -> None:
     engine, config = _focus_migration_database(
         tmp_path,
@@ -677,6 +751,7 @@ def test_focus_source_migration_downgrade_derives_legacy_fields(tmp_path: Path) 
     assert restored == (1, "Work")
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_terminology_migration_preserves_history_and_supports_downgrade(tmp_path: Path) -> None:
     database = tmp_path / "terminology.db"
     engine = create_engine(f"sqlite:///{database}", future=True)
@@ -749,6 +824,7 @@ def test_terminology_migration_preserves_history_and_supports_downgrade(tmp_path
     ]
 
 
+@pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_terminology_migration_rejects_unknown_values_before_changing_schema(tmp_path: Path) -> None:
     database = tmp_path / "unknown-terminology.db"
     engine = create_engine(f"sqlite:///{database}", future=True)
