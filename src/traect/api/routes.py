@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from traect.api.serializers import (
@@ -9,12 +10,20 @@ from traect.api.serializers import (
     workspace_response,
 )
 from traect.app.errors import NotFoundError, ValidationError
+from traect.app.focus_history import FocusHistoryService, parse_focus_history_range
 from traect.app.service import UNSET, TraectService, WeekStateInput
 from traect.domain.enums import DomainAttention, DomainCondition
 
 
-def dispatch(service: TraectService, method: str, path: str, payload: dict[str, Any]) -> Any:
+def dispatch(
+    service: TraectService,
+    method: str,
+    path: str,
+    payload: dict[str, Any],
+    query: Mapping[str, Sequence[str]] | None = None,
+) -> Any:
     parts = [part for part in path.split("/") if part]
+    query = query or {}
     if method == "POST" and parts == ["workspaces"]:
         domain_items = payload.get("domains", [])
         domains = [item["name"] for item in domain_items]
@@ -63,6 +72,17 @@ def dispatch(service: TraectService, method: str, path: str, payload: dict[str, 
         return domain_response(service.archive_domain(int(parts[1])))
     if method == "POST" and len(parts) == 3 and parts[0] == "domains" and parts[2] == "restore":
         return domain_response(service.restore_domain(int(parts[1])))
+    if method == "GET" and len(parts) == 4 and parts[0] == "workspaces" and parts[2:] == ["history", "focus"]:
+        range_values = query.get("reviewed_weeks", [])
+        if len(range_values) > 1:
+            raise ValidationError("reviewed_weeks must be provided once")
+        reviewed_weeks = parse_focus_history_range(range_values[0] if range_values else None)
+        service.get_workspace(int(parts[1]))
+        return FocusHistoryService(service.session).aggregate(
+            int(parts[1]),
+            current_iso_week=service.current_iso_week(),
+            reviewed_weeks=reviewed_weeks,
+        )
     if method == "PUT" and len(parts) == 5 and parts[0] == "workspaces" and parts[2] == "weeks":
         return _upsert_week(service, parts, payload)
     if (

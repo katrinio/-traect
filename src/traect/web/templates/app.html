@@ -51,6 +51,25 @@
             <h2 class="view-title" id="timeline-title">Timeline</h2>
             <p class="hint">Saved weekly snapshots in reverse chronological order.</p>
           </div>
+          <section class="focus-history" aria-labelledby="focus-history-title">
+            <div class="focus-history-heading">
+              <div>
+                <h3 class="section-title" id="focus-history-title">Focus history</h3>
+                <p class="hint">Where Primary focus was recorded across saved weekly reviews.</p>
+              </div>
+              <label class="focus-history-range">Range
+                <select id="focus-history-range" aria-controls="focus-history-content">
+                  <option value="12">Last 12 reviewed weeks</option>
+                  <option value="26">Last 26 reviewed weeks</option>
+                  <option value="52">Last 52 reviewed weeks</option>
+                  <option value="all">All history</option>
+                </select>
+              </label>
+            </div>
+            <div class="status" id="focus-history-status" role="status"></div>
+            <div class="focus-history-content" id="focus-history-content"></div>
+          </section>
+          <h3 class="section-title">Weekly snapshots</h3>
           <div class="status" id="timeline-status" role="status"></div>
           <div class="timeline-entries" id="timeline-entries"></div>
         </section>

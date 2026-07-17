@@ -1,6 +1,7 @@
 import { fetchJSON } from "/js/api.js";
 import { renderCurrent } from "/js/current.js";
 import { renderDomainManagement } from "/js/domains.js";
+import { mapFocusHistory, renderFocusHistory } from "/js/focus-history.js";
 import {
   activeDomains,
   hasDuplicateNames,
@@ -19,6 +20,7 @@ const state = {
   currentWeek: null,
   currentReview: null,
   timeline: { items: null, loading: false, error: null },
+  focusHistory: { data: null, loading: false, error: null, range: "12" },
   activeView: "current",
   setupDraft: [{ name: "" }],
 };
@@ -38,6 +40,9 @@ const el = {
   currentGroups: document.getElementById("current-groups"),
   timelineEntries: document.getElementById("timeline-entries"),
   timelineStatus: document.getElementById("timeline-status"),
+  focusHistoryContent: document.getElementById("focus-history-content"),
+  focusHistoryStatus: document.getElementById("focus-history-status"),
+  focusHistoryRange: document.getElementById("focus-history-range"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
   archivedDomains: document.getElementById("archived-domains"),
@@ -72,6 +77,11 @@ document.getElementById("add-domain")?.addEventListener("click", () => {
 
 document.getElementById("add-active-domain")?.addEventListener("click", async () => {
   await withStatus(el.manageStatus, createDomainFromManage);
+});
+
+el.focusHistoryRange?.addEventListener("change", () => {
+  state.focusHistory.range = el.focusHistoryRange.value;
+  loadFocusHistory();
 });
 
 el.editReviewButton?.addEventListener("click", () => setActiveView("edit"));
@@ -167,7 +177,10 @@ function showOnly(view) {
 function setActiveView(view) {
   state.activeView = view;
   render();
-  if (view === "timeline" && state.timeline.items === null && !state.timeline.loading) loadTimeline();
+  if (view === "timeline") {
+    if (state.timeline.items === null && !state.timeline.loading) loadTimeline();
+    if (state.focusHistory.data === null && !state.focusHistory.loading) loadFocusHistory();
+  }
 }
 
 function renderSetupView() {
@@ -200,6 +213,27 @@ function renderTimelineView() {
       onEdit: () => setActiveView("edit"),
     },
   );
+  renderFocusHistory(
+    { content: el.focusHistoryContent, status: el.focusHistoryStatus, range: el.focusHistoryRange },
+    state.focusHistory,
+    { onRetry: loadFocusHistory },
+  );
+}
+
+async function loadFocusHistory() {
+  state.focusHistory.loading = true;
+  state.focusHistory.error = null;
+  renderTimelineView();
+  try {
+    const range = encodeURIComponent(state.focusHistory.range);
+    const payload = await fetchJSON(`/workspaces/${state.workspace.id}/history/focus?reviewed_weeks=${range}`);
+    state.focusHistory.data = mapFocusHistory(payload);
+  } catch (error) {
+    state.focusHistory.error = error.message || "Focus history could not be loaded.";
+  } finally {
+    state.focusHistory.loading = false;
+    renderTimelineView();
+  }
 }
 
 async function loadTimeline() {
@@ -257,6 +291,7 @@ async function saveReview() {
   );
   await loadState();
   state.timeline = { items: null, loading: false, error: null };
+  state.focusHistory = { ...state.focusHistory, data: null, error: null };
   state.activeView = "current";
   render();
 }
@@ -304,5 +339,6 @@ async function createDomainFromManage() {
 
 async function refresh() {
   await loadState();
+  state.focusHistory = { ...state.focusHistory, data: null, error: null };
   render();
 }

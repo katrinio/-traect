@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 from zoneinfo import ZoneInfo
 
@@ -45,7 +46,8 @@ def build_app(
                 input_stream = cast(Any, environ["wsgi.input"])
                 body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
                 payload = _load_payload(body)
-                result = dispatch(service, method, path, payload)
+                query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
+                result = dispatch(service, method, path, payload, query)
                 session.commit()
                 return _json_response(start_response, "200 OK", result)
             except ValidationError as exc:
