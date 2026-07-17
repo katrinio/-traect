@@ -20,6 +20,8 @@ const el = {
   editView: document.getElementById("edit-view"),
   manageView: document.getElementById("manage-view"),
   weekMeta: document.getElementById("week-meta"),
+  currentTradeoff: document.getElementById("current-tradeoff"),
+  currentTradeoffContent: document.getElementById("current-tradeoff-content"),
   currentGroups: document.getElementById("current-groups"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
@@ -220,6 +222,7 @@ function moveSetupDomain(index, offset) {
 function renderCurrent() {
   if (!el.currentGroups) return;
   const review = state.currentReview;
+  renderCurrentTradeOff(review);
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   const grouped = {
     focus: [],
@@ -239,6 +242,54 @@ function renderCurrent() {
   ].filter(([, entries]) => entries.length > 0);
 
   el.currentGroups.replaceChildren(...groups.map(([title, entries]) => renderGroup(title, entries)));
+}
+
+function renderCurrentTradeOff(review) {
+  if (!el.currentTradeoff || !el.currentTradeoffContent) return;
+  if (!review) {
+    el.currentTradeoff.classList.add("hidden");
+    el.currentTradeoffContent.replaceChildren();
+    return;
+  }
+
+  el.currentTradeoff.classList.remove("hidden");
+  if (!review.focus_domain_id) {
+    const empty = document.createElement("p");
+    empty.className = "tradeoff-empty";
+    empty.textContent = "No primary focus recorded.";
+    el.currentTradeoffContent.replaceChildren(empty);
+    return;
+  }
+
+  const domainsById = new Map(state.domains.map((domain) => [domain.id, domain]));
+  const list = document.createElement("dl");
+  list.className = "tradeoff-list";
+  list.appendChild(renderTradeOffRow("focus", "Main focus", domainName(domainsById, review.focus_domain_id)));
+
+  const sacrificed = review.sacrificed_domain_id
+    ? domainName(domainsById, review.sacrificed_domain_id)
+    : "None recorded";
+  list.appendChild(renderTradeOffRow("sacrifice", "What gave way", sacrificed));
+  if (review.sacrifice_reason) {
+    list.appendChild(renderTradeOffRow("reason", "Why", review.sacrifice_reason));
+  }
+  el.currentTradeoffContent.replaceChildren(list);
+}
+
+function renderTradeOffRow(field, label, value) {
+  const row = document.createElement("div");
+  row.className = "tradeoff-row";
+  row.dataset.tradeoffField = field;
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const description = document.createElement("dd");
+  description.textContent = value;
+  row.append(term, description);
+  return row;
+}
+
+function domainName(domainsById, domainId) {
+  return domainsById.get(domainId)?.name || "Unknown domain";
 }
 
 function renderGroup(title, entries) {
