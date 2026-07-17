@@ -345,6 +345,8 @@ section {
 
 #focus-history-panel,
 .condition-history,
+.tradeoff-history,
+.tradeoff-history-content,
 .condition-history-content,
 .condition-distribution,
 .condition-coverage,
@@ -357,6 +359,122 @@ section {
   display: grid;
   min-width: 0;
   gap: var(--space-3);
+}
+
+.tradeoff-history-content > *,
+.tradeoff-history-content section,
+.tradeoff-pair-detail {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+
+.tradeoff-history-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.tradeoff-history-summary > div {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tradeoff-history-summary dd {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.tradeoff-sacrifice-ranking,
+.tradeoff-history-weeks,
+.tradeoff-pair-detail ul,
+.tradeoff-breakdown ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.tradeoff-sacrifice-ranking li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+}
+
+.tradeoff-sacrifice-ranking .hint {
+  grid-column: 1 / -1;
+}
+
+.tradeoff-pair-ranking {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.tradeoff-pair,
+.tradeoff-breakdown {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tradeoff-pair summary,
+.tradeoff-breakdown summary {
+  padding: var(--space-3);
+}
+
+.tradeoff-pair summary {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.tradeoff-pair-bar {
+  grid-column: 1 / -1;
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.tradeoff-pair-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.tradeoff-pair-detail {
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.tradeoff-pair-detail p {
+  margin: 0;
+}
+
+.tradeoff-domain-status {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.tradeoff-history-integrity,
+.tradeoff-history-empty {
+  min-height: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .condition-history-heading {
@@ -714,6 +832,28 @@ section {
 
   .focus-history-summary {
     grid-template-columns: 1fr;
+  }
+
+  .tradeoff-history-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tradeoff-sacrifice-ranking li,
+  .tradeoff-pair summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tradeoff-pair-bar,
+  .tradeoff-sacrifice-ranking .hint {
+    grid-column: 1;
+  }
+
+  .tradeoff-pair-label::after {
+    display: block;
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    content: "Primary focus → What gave way";
   }
 
   .focus-domain-history summary {

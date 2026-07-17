@@ -12,6 +12,7 @@ import {
 import { collectReviewPayload, renderReview } from "/js/review.js";
 import { renderSetup } from "/js/setup.js";
 import { mapTimelineHistory, renderTimeline } from "/js/timeline.js";
+import { mapTradeoffHistory, renderTradeoffHistory } from "/js/tradeoff-history.js";
 
 const storageKey = "traect.workspace_id";
 
@@ -23,6 +24,7 @@ const state = {
   timeline: { items: null, loading: false, error: null },
   focusHistory: { data: null, loading: false, error: null, range: "12" },
   conditionHistory: { data: null, loading: false, error: null, domainId: null },
+  tradeoffHistory: { data: null, loading: false, error: null },
   historyView: "focus",
   activeView: "current",
   setupDraft: [{ name: "" }],
@@ -48,11 +50,15 @@ const el = {
   focusHistoryRange: document.getElementById("focus-history-range"),
   historyFocusTab: document.getElementById("history-focus-tab"),
   historyConditionTab: document.getElementById("history-condition-tab"),
+  historyTradeoffsTab: document.getElementById("history-tradeoffs-tab"),
   focusHistoryPanel: document.getElementById("focus-history-panel"),
   conditionHistoryPanel: document.getElementById("condition-history-panel"),
   conditionHistoryContent: document.getElementById("condition-history-content"),
   conditionHistoryStatus: document.getElementById("condition-history-status"),
   conditionHistoryDomain: document.getElementById("condition-history-domain"),
+  tradeoffHistoryPanel: document.getElementById("tradeoff-history-panel"),
+  tradeoffHistoryContent: document.getElementById("tradeoff-history-content"),
+  tradeoffHistoryStatus: document.getElementById("tradeoff-history-status"),
   reviewDomains: document.getElementById("review-domains"),
   manageDomains: document.getElementById("manage-domains"),
   archivedDomains: document.getElementById("archived-domains"),
@@ -93,11 +99,13 @@ el.focusHistoryRange?.addEventListener("change", () => {
   state.focusHistory.range = el.focusHistoryRange.value;
   state.focusHistory.data = null;
   state.conditionHistory.data = null;
+  state.tradeoffHistory.data = null;
   loadActiveHistory();
 });
 
 el.historyFocusTab?.addEventListener("click", () => setHistoryView("focus"));
 el.historyConditionTab?.addEventListener("click", () => setHistoryView("condition"));
+el.historyTradeoffsTab?.addEventListener("click", () => setHistoryView("tradeoffs"));
 el.conditionHistoryDomain?.addEventListener("change", () => {
   state.conditionHistory.domainId = Number(el.conditionHistoryDomain.value);
   loadConditionHistory();
@@ -211,7 +219,9 @@ function setHistoryView(view) {
 function loadActiveHistory() {
   if (state.historyView === "focus") {
     if (state.focusHistory.data === null && !state.focusHistory.loading) loadFocusHistory();
-  } else if (state.conditionHistory.data === null && !state.conditionHistory.loading) loadConditionHistory();
+  } else if (state.historyView === "condition") {
+    if (state.conditionHistory.data === null && !state.conditionHistory.loading) loadConditionHistory();
+  } else if (state.tradeoffHistory.data === null && !state.tradeoffHistory.loading) loadTradeoffHistory();
 }
 
 function renderSetupView() {
@@ -259,14 +269,23 @@ function renderTimelineView() {
     state.conditionHistory,
     { onRetry: loadConditionHistory },
   );
+  renderTradeoffHistory(
+    { content: el.tradeoffHistoryContent, status: el.tradeoffHistoryStatus },
+    state.tradeoffHistory,
+    { onRetry: loadTradeoffHistory },
+  );
 }
 
 function renderHistoryTabs() {
   const focusSelected = state.historyView === "focus";
+  const conditionSelected = state.historyView === "condition";
+  const tradeoffsSelected = state.historyView === "tradeoffs";
   el.historyFocusTab?.setAttribute("aria-selected", String(focusSelected));
-  el.historyConditionTab?.setAttribute("aria-selected", String(!focusSelected));
+  el.historyConditionTab?.setAttribute("aria-selected", String(conditionSelected));
+  el.historyTradeoffsTab?.setAttribute("aria-selected", String(tradeoffsSelected));
   el.focusHistoryPanel?.classList.toggle("hidden", !focusSelected);
-  el.conditionHistoryPanel?.classList.toggle("hidden", focusSelected);
+  el.conditionHistoryPanel?.classList.toggle("hidden", !conditionSelected);
+  el.tradeoffHistoryPanel?.classList.toggle("hidden", !tradeoffsSelected);
 }
 
 async function loadFocusHistory() {
@@ -303,6 +322,24 @@ async function loadConditionHistory() {
     state.conditionHistory.error = error.message || "Condition history could not be loaded.";
   } finally {
     state.conditionHistory.loading = false;
+    renderTimelineView();
+  }
+}
+
+async function loadTradeoffHistory() {
+  state.tradeoffHistory.loading = true;
+  state.tradeoffHistory.error = null;
+  renderTimelineView();
+  try {
+    const range = encodeURIComponent(state.focusHistory.range);
+    const payload = await fetchJSON(
+      `/workspaces/${state.workspace.id}/history/trade-offs?reviewed_weeks=${range}`,
+    );
+    state.tradeoffHistory.data = mapTradeoffHistory(payload);
+  } catch (error) {
+    state.tradeoffHistory.error = error.message || "Trade-off patterns could not be loaded.";
+  } finally {
+    state.tradeoffHistory.loading = false;
     renderTimelineView();
   }
 }
@@ -364,6 +401,7 @@ async function saveReview() {
   state.timeline = { items: null, loading: false, error: null };
   state.focusHistory = { ...state.focusHistory, data: null, error: null };
   state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
+  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
   state.activeView = "current";
   render();
 }
@@ -413,5 +451,6 @@ async function refresh() {
   await loadState();
   state.focusHistory = { ...state.focusHistory, data: null, error: null };
   state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
+  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
   render();
 }

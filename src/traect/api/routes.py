@@ -13,6 +13,7 @@ from traect.app.condition_history import ConditionHistoryService
 from traect.app.errors import NotFoundError, ValidationError
 from traect.app.focus_history import FocusHistoryService, parse_focus_history_range
 from traect.app.service import UNSET, TraectService, WeekStateInput
+from traect.app.tradeoff_history import TradeoffHistoryService
 from traect.domain.enums import DomainAttention, DomainCondition
 
 
@@ -101,6 +102,24 @@ def dispatch(
             reviewed_weeks=reviewed_weeks,
             domain_id=domain_id,
         )
+    if method == "GET" and len(parts) == 4 and parts[0] == "workspaces" and parts[2:] == ["history", "trade-offs"]:
+        allowed = {"reviewed_weeks", "focus_domain_id", "sacrifice_domain_id"}
+        if any(key not in allowed for key in query):
+            raise ValidationError("unknown trade-off history query parameter")
+        if any(len(query.get(key, [])) > 1 for key in allowed):
+            raise ValidationError("history query parameters must be provided once")
+        reviewed_values = query.get("reviewed_weeks", [])
+        reviewed_weeks = parse_focus_history_range(reviewed_values[0] if reviewed_values else None)
+        focus_domain_id = _optional_query_integer(query, "focus_domain_id")
+        sacrifice_domain_id = _optional_query_integer(query, "sacrifice_domain_id")
+        service.get_workspace(int(parts[1]))
+        return TradeoffHistoryService(service.session).aggregate(
+            int(parts[1]),
+            current_iso_week=service.current_iso_week(),
+            reviewed_weeks=reviewed_weeks,
+            focus_domain_id=focus_domain_id,
+            sacrifice_domain_id=sacrifice_domain_id,
+        )
     if method == "PUT" and len(parts) == 5 and parts[0] == "workspaces" and parts[2] == "weeks":
         return _upsert_week(service, parts, payload)
     if (
@@ -124,6 +143,16 @@ def dispatch(
         weeks = service.list_weeks(int(parts[1]))
         return {"items": [week_response(week, service.review_lifecycle(week)) for week in weeks]}
     raise NotFoundError("route not found")
+
+
+def _optional_query_integer(query: Mapping[str, Sequence[str]], name: str) -> int | None:
+    values = query.get(name, [])
+    if not values:
+        return None
+    try:
+        return int(values[0])
+    except ValueError as exc:
+        raise ValidationError(f"{name} must be an integer") from exc
 
 
 def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, Any]) -> dict[str, Any]:

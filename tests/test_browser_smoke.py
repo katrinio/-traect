@@ -713,6 +713,11 @@ def test_condition_history_empty_state_and_domain_selector_stay_in_timeline(page
     expect(page.get_by_text("No Condition history yet.", exact=True)).to_be_visible()
     expect(page.get_by_role("tab", name="Condition")).to_have_attribute("aria-selected", "true")
     expect(page.get_by_role("tab", name="Focus")).to_have_attribute("aria-selected", "false")
+    page.get_by_role("tab", name="Trade-offs").click()
+    expect(page.get_by_text("No trade-off history yet.", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text("Recorded weekly trade-offs will appear here after reviews are saved.", exact=True)
+    ).to_be_visible()
 
 
 @pytest.mark.browser
@@ -916,6 +921,132 @@ def test_paused_history_has_calm_empty_state_when_attention_was_never_paused(
     page.get_by_role("tab", name="Condition").click()
 
     expect(page.get_by_text("No paused sequences have been recorded.", exact=True)).to_be_visible()
+
+
+@pytest.mark.browser
+def test_tradeoff_patterns_render_rankings_breakdowns_reverse_pairs_and_sources(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Social"])
+    save_week_review(live_app, workspace_id, domains, 2026, 25, focus="Work", sacrificed="Social")
+    save_week_review(live_app, workspace_id, domains, 2026, 26, focus="Work", sacrificed="Social")
+    save_week_review(live_app, workspace_id, domains, 2026, 27, focus="Social", sacrificed="Work")
+    save_week_review(live_app, workspace_id, domains, 2026, 28, focus="Work")
+    save_current_review(live_app, workspace_id, domains, focus="Work", sacrificed="Social")
+    request_json(live_app, "POST", f"/domains/{domains['Social']}/archive")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Trade-offs").click()
+    panel = page.locator("#tradeoff-history-panel")
+
+    expect(panel.get_by_role("heading", name="Trade-off patterns")).to_be_visible()
+    expect(panel.locator(".tradeoff-history-summary dd")).to_have_text(["5", "5", "4", "4", "1", "0"])
+    ranking = panel.locator(".tradeoff-sacrifice-ranking li")
+    expect(ranking).to_have_count(2)
+    expect(ranking.nth(0)).to_contain_text("Social")
+    expect(ranking.nth(0)).to_contain_text("3 of 4 recorded trade-offs · 75%")
+    expect(ranking.nth(0)).to_contain_text("Archived")
+
+    pairs = panel.locator(".tradeoff-pair")
+    expect(pairs).to_have_count(2)
+    expect(pairs.nth(0)).to_contain_text("Work → Social")
+    expect(pairs.nth(0)).to_contain_text("3 of 4 recorded trade-offs · 75%")
+    expect(pairs.nth(1)).to_contain_text("Social → Work")
+    pairs.nth(0).locator("summary").click()
+    source = pairs.nth(0).get_by_role("link", name="Open trade-off review for Week 26, 2026")
+    source.click()
+    expect(page.locator("#timeline-week-2")).to_have_attribute("open", "")
+
+    work_breakdown = panel.get_by_text("When Work was Primary focus · 4 weeks", exact=False)
+    work_breakdown.click()
+    expect(panel.get_by_text("Social was recorded as What gave way · 3 of 4 weeks · 75%", exact=True)).to_be_visible()
+    expect(panel.get_by_text("No trade-off · 1 of 4 weeks", exact=True)).to_be_visible()
+    social_breakdown = panel.get_by_text("When Social was What gave way · 3 weeks", exact=False)
+    social_breakdown.click()
+    expect(panel.get_by_text("Work was Primary focus · 3 weeks · 100%", exact=True)).to_be_visible()
+    expect(panel.get_by_text("Week 29, 2026 · Work → Social · Provisional", exact=True)).to_be_visible()
+
+    copy = panel.inner_text().lower()
+    for forbidden in ["caused", "resulted", "harmed", "neglected", "should", "predict", "impact score"]:
+        assert forbidden not in copy
+
+    page.set_viewport_size({"width": 375, "height": 800})
+    expect(panel.locator(".tradeoff-pair-label").first).to_contain_text("Work → Social")
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+
+
+@pytest.mark.browser
+def test_tradeoff_patterns_empty_states_shared_range_and_integrity_notice(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work"])
+    save_current_review(live_app, workspace_id, domains, focus="Work")
+
+    page.goto(live_app)
+    page.get_by_role("button", name="Timeline").click()
+    page.get_by_role("tab", name="Trade-offs").click()
+    panel = page.locator("#tradeoff-history-panel")
+    expect(panel.get_by_text("No Domain was recorded as What gave way during this period.", exact=True)).to_be_visible()
+    expect(panel.locator(".tradeoff-history-summary dd")).to_have_text(["1", "1", "0", "0", "1", "0"])
+
+    page.get_by_label("Range").select_option("26")
+    expect(page.get_by_label("Range")).to_have_value("26")
+    page.get_by_role("tab", name="Focus").click()
+    expect(page.get_by_label("Range")).to_have_value("26")
+
+    page.route(
+        "**/history/trade-offs?*",
+        lambda route: route.fulfill(
+            json={
+                "range": {"type": "reviewed_weeks", "value": 26},
+                "filters": {"focus_domain_id": None, "sacrifice_domain_id": None},
+                "summary": {
+                    "reviewed_week_count": 1,
+                    "focus_week_count": 0,
+                    "sacrifice_week_count": 1,
+                    "valid_pair_count": 0,
+                    "focus_without_sacrifice_count": 0,
+                    "no_focus_count": 0,
+                    "excluded_pair_count": 1,
+                },
+                "sacrifices": [],
+                "pairs": [],
+                "focus_breakdowns": [],
+                "sacrifice_breakdowns": [],
+                "selected_focus": None,
+                "selected_sacrifice": None,
+                "weeks": [
+                    {
+                        "week_id": 1,
+                        "iso_year": 2026,
+                        "iso_week": 29,
+                        "lifecycle": "provisional",
+                        "status": "excluded",
+                        "focus": None,
+                        "sacrifice": None,
+                        "excluded_reason": "sacrifice_without_focus",
+                    }
+                ],
+                "integrity": {
+                    "excluded_pair_count": 1,
+                    "issues": [{"code": "sacrifice_without_focus", "week_id": 1, "iso_year": 2026, "iso_week": 29}],
+                    "excluded_reasons": {"sacrifice_without_focus": 1},
+                },
+                "observations": [],
+            }
+        ),
+    )
+    page.get_by_role("tab", name="Trade-offs").click()
+    page.get_by_label("Range").select_option("52")
+    expect(
+        panel.get_by_text("1 trade-off record was excluded because historical data is inconsistent.", exact=True)
+    ).to_be_visible()
+    expect(
+        panel.get_by_text("Trade-off patterns cannot be summarized until the historical data is reviewed.", exact=True)
+    ).to_be_visible()
 
 
 @pytest.mark.browser

@@ -55,10 +55,10 @@
             <div class="focus-history-heading">
               <div>
                 <h3 class="section-title" id="history-title">History</h3>
-                <p class="hint">Recorded Focus and Condition across saved weekly reviews.</p>
+                <p class="hint">Recorded Focus, Condition, and trade-offs across saved weekly reviews.</p>
               </div>
               <label class="focus-history-range">Range
-                <select id="focus-history-range" aria-controls="focus-history-content condition-history-content">
+                <select id="focus-history-range" aria-controls="focus-history-content condition-history-content tradeoff-history-content">
                   <option value="12">Last 12 reviewed weeks</option>
                   <option value="26">Last 26 reviewed weeks</option>
                   <option value="52">Last 52 reviewed weeks</option>
@@ -71,6 +71,8 @@
                 aria-selected="true" aria-controls="focus-history-panel">Focus</button>
               <button class="tab" id="history-condition-tab" type="button" role="tab"
                 aria-selected="false" aria-controls="condition-history-panel">Condition</button>
+              <button class="tab" id="history-tradeoffs-tab" type="button" role="tab"
+                aria-selected="false" aria-controls="tradeoff-history-panel">Trade-offs</button>
             </div>
             <section id="focus-history-panel" role="tabpanel" aria-labelledby="history-focus-tab">
               <div>
@@ -79,6 +81,15 @@
               </div>
               <div class="status" id="focus-history-status" role="status"></div>
               <div class="focus-history-content" id="focus-history-content"></div>
+            </section>
+            <section id="tradeoff-history-panel" class="tradeoff-history hidden" role="tabpanel"
+              aria-labelledby="history-tradeoffs-tab">
+              <div>
+                <h4 class="section-title">Trade-off patterns</h4>
+                <p class="hint">Primary focus and What gave way selections recorded in the same saved reviews.</p>
+              </div>
+              <div class="status" id="tradeoff-history-status" role="status"></div>
+              <div class="tradeoff-history-content" id="tradeoff-history-content"></div>
             </section>
             <section id="condition-history-panel" class="condition-history hidden" role="tabpanel"
               aria-labelledby="history-condition-tab">

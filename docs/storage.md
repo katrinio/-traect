@@ -64,6 +64,14 @@ Paused sequences вычисляются без отдельной таблицы
 
 Condition, minimum acceptable level, архивность и свободный текст не участвуют в расчёте. Сохранённый provisional snapshot включается, несохранённая форма не включается. Persisted historical correction автоматически меняет текущую, самую длинную и исторические последовательности при следующем чтении.
 
+## Trade-off patterns
+
+Trade-off patterns не имеют отдельной таблицы или persistent counters. Read-only service использует общую трёхзапросную history-загрузку и связывает единственный валидный `attention = primary_focus` с `week.sacrificed_domain_id`. Последние 12, 26 и 52 означают persisted reviewed weeks, `all` — всю валидную историю до текущей ISO-недели; сохранённый provisional snapshot включается.
+
+Пары, sacrifice ranking и оба Domain-centric breakdown группируются по стабильным ID. Имена берутся из weekly Domain-state snapshots, текущая Domain metadata используется только для textual archived/unavailable status и sort order. Missing current Domain reference не стирает читаемую историческую пару, если state сохраняет стабильный ID и snapshot name.
+
+Shares пар и `What gave way` делятся на valid paired weeks. Focus-centric shares делятся на валидные недели конкретного Primary-focus Domain и поэтому сохраняют `focus_without_sacrifice`. Duplicate Week, duplicate state, invalid/multiple focus, sacrifice без focus, self-pair и missing sacrifice state возвращаются как integrity metadata и не попадают в ranking. Свободный `sacrifice_reason` не загружается для агрегации и не анализируется.
+
 ## Аудит legacy weekly data
 
 On-demand аудит читает сырые табличные значения, поэтому способен сообщить о неизвестных enum и повреждённых ссылках, которые ORM не может безопасно загрузить. Safe repairs отделены от обнаружения и разрешаются только флагом `--fix-safe`; каждая Week ремонтируется в своей транзакции и повторно проверяется перед commit.

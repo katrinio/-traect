@@ -36,7 +36,7 @@ def load_history_rows(session: Session, workspace_id: int) -> HistoryRows:
     weeks = list(
         session.execute(
             text(
-                "SELECT id, iso_year, iso_week FROM week "
+                "SELECT id, iso_year, iso_week, sacrificed_domain_id, sacrificed_domain_name FROM week "
                 "WHERE workspace_id = :workspace_id "
                 "ORDER BY iso_year DESC, iso_week DESC, id DESC"
             ),
