@@ -28,7 +28,12 @@
 
       <main>
         <section id="current-view">
-          <div class="meta" id="week-meta"></div>
+          <h2 class="meta week-heading" id="week-meta"></h2>
+
+          <section class="current-tradeoff hidden" id="current-tradeoff" aria-labelledby="current-tradeoff-title">
+            <h3 class="section-title" id="current-tradeoff-title">This week</h3>
+            <div id="current-tradeoff-content"></div>
+          </section>
 
           <section class="current-groups" id="current-groups"></section>
 
@@ -94,6 +99,6 @@
     <script>
       window.TRAECT_API_BASE = "";
     </script>
-    <script src="/app.js?v=20260717-review-flow-4" type="module"></script>
+    <script src="/app.js?v=20260717-current-tradeoff" type="module"></script>
   </body>
 </html>
