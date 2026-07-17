@@ -58,6 +58,12 @@ Condition history использует ту же функцию range parsing и
 
 Историческое имя берётся из самого свежего валидного Domain-state snapshot в диапазоне. Архивность берётся из текущей Domain metadata. Состояние с отсутствующей Domain reference остаётся доступным под исходным ID и fallback-именем `Unavailable Domain`.
 
+## Paused sequences
+
+Paused sequences вычисляются без отдельной таблицы и persistent counters из того же bounded history набора. Единственный источник — `WeekDomainState.attention == paused`. Последовательность продолжают только соседние календарные reviewed weeks с одним валидным состоянием выбранного Domain; другой attention, absent state, пропущенная review-неделя, duplicate/conflicting state или неизвестный attention разрывают её.
+
+Condition, minimum acceptable level, архивность и свободный текст не участвуют в расчёте. Сохранённый provisional snapshot включается, несохранённая форма не включается. Persisted historical correction автоматически меняет текущую, самую длинную и исторические последовательности при следующем чтении.
+
 ## Аудит legacy weekly data
 
 On-demand аудит читает сырые табличные значения, поэтому способен сообщить о неизвестных enum и повреждённых ссылках, которые ORM не может безопасно загрузить. Safe repairs отделены от обнаружения и разрешаются только флагом `--fix-safe`; каждая Week ремонтируется в своей транзакции и повторно проверяется перед commit.
