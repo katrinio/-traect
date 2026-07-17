@@ -104,6 +104,7 @@ class FocusHistoryService:
                 focus = {
                     "domain_id": domain_id,
                     "name": identity["name"],
+                    "archived": identity["archived"],
                     "unavailable": identity["unavailable"],
                     "name_source": identity["name_source"],
                 }

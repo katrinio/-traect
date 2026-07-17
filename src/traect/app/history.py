@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from traect.app.errors import ValidationError
-from traect.domain.enums import DomainAttention
+from traect.domain.enums import DomainAttention, ReviewLifecycle
 
 SUPPORTED_REVIEWED_WEEK_RANGES = {12, 26, 52}
 
@@ -132,7 +132,9 @@ def review_lifecycle(iso_year: int, iso_week: int, current_iso_week: tuple[int, 
     afterwards; the lifecycle is derived, never stored. Returned as a plain
     string because history rows are serialised directly to JSON.
     """
-    return "provisional" if (iso_year, iso_week) == current_iso_week else "final"
+    if (iso_year, iso_week) == current_iso_week:
+        return ReviewLifecycle.PROVISIONAL.value
+    return ReviewLifecycle.FINAL.value
 
 
 def week_reference(week: Mapping[str, Any]) -> dict[str, int]:

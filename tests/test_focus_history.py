@@ -295,7 +295,7 @@ def test_focus_history_api_shape_ranges_and_week_references(tmp_path: Path) -> N
         "iso_year": 2026,
         "iso_week": 29,
         "lifecycle": "provisional",
-        "focus": {"domain_id": 1, "name": "Work", "unavailable": False, "name_source": "snapshot"},
+        "focus": {"domain_id": 1, "name": "Work", "archived": False, "unavailable": False, "name_source": "snapshot"},
     }
 
     invalid = request(app, "GET", "/workspaces/1/history/focus?reviewed_weeks=10")
