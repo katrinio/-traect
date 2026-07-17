@@ -142,10 +142,18 @@ section {
 }
 
 .week-summary,
+.domain-review,
 .setup,
 .manage {
   display: grid;
   gap: var(--space-3);
+}
+
+.week-summary {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
 }
 
 .hidden {

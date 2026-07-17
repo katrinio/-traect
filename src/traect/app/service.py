@@ -151,11 +151,6 @@ class TraectService:
         if sacrificed_domain_id is not None:
             self._validate_domain_in_workspace(sacrificed_domain_id, workspace.id)
 
-        week.focus_domain_id = focus_domain_id
-        week.sacrificed_domain_id = sacrificed_domain_id
-        week.sacrifice_reason = sacrifice_reason
-        week.notes = notes
-
         active_domain_ids = {domain.id for domain in self.list_domains(workspace.id, include_archived=False)}
         if states is None:
             states = [
@@ -165,8 +160,28 @@ class TraectService:
 
         state_by_domain_id = {state.domain_id: state for state in week.domain_states}
         incoming_domain_ids = {state.domain_id for state in states}
-        if incoming_domain_ids != active_domain_ids:
+        if incoming_domain_ids != active_domain_ids or len(states) != len(active_domain_ids):
             raise ValidationError("weekly review must contain one state for each active domain")
+
+        focused_domain_ids = [state.domain_id for state in states if state.mode == WeekDomainMode.FOCUS]
+        if len(focused_domain_ids) > 1:
+            raise ValidationError("weekly review can contain only one primary focus")
+        derived_focus_domain_id = focused_domain_ids[0] if focused_domain_ids else None
+        if focus_domain_id is not None and focus_domain_id != derived_focus_domain_id:
+            raise ValidationError("main focus must match the domain marked as primary focus")
+        if sacrificed_domain_id is not None and derived_focus_domain_id is None:
+            raise ValidationError("what gave way requires a main focus")
+        if sacrifice_reason is not None and sacrificed_domain_id is None:
+            raise ValidationError("trade-off reason requires a domain that gave way")
+        if derived_focus_domain_id is not None and derived_focus_domain_id == sacrificed_domain_id:
+            raise ValidationError("main focus and what gave way must be different domains")
+        if any(state.comment is not None and len(state.comment) > 300 for state in states):
+            raise ValidationError("domain context must be 300 characters or fewer")
+
+        week.focus_domain_id = derived_focus_domain_id
+        week.sacrificed_domain_id = sacrificed_domain_id
+        week.sacrifice_reason = sacrifice_reason
+        week.notes = notes
 
         for state_input in states:
             self._validate_domain_in_workspace(state_input.domain_id, workspace.id)

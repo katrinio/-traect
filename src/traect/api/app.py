@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
@@ -9,7 +10,7 @@ from wsgiref.simple_server import make_server
 
 from sqlalchemy import select
 
-from traect.app.database import create_schema, make_engine, make_session_factory
+from traect.app.database import make_engine, make_session_factory, migrate_schema
 from traect.app.errors import NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService, WeekStateInput
 from traect.domain.enums import WeekDomainMode, WeekDomainStatus
@@ -20,7 +21,7 @@ WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
 
 def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., Any]], list[bytes]]:
     engine = make_engine(database_url)
-    create_schema(engine)
+    migrate_schema(engine)
     session_factory = make_session_factory(engine)
 
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
@@ -31,29 +32,32 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
         static = _serve_static(start_response, method, path)
         if static is not None:
             return static
-        input_stream = cast(Any, environ["wsgi.input"])
-        body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
-        payload = _load_payload(body)
-
         with session_factory() as session:
             service = TraectService(session)
             try:
+                input_stream = cast(Any, environ["wsgi.input"])
+                body = input_stream.read(int(environ.get("CONTENT_LENGTH", "0") or 0))
+                payload = _load_payload(body)
                 result = _dispatch(service, method, path, payload)
                 session.commit()
-                start_response("200 OK", [("Content-Type", "application/json")])
-                return [json.dumps(result, default=_json_default).encode()]
+                return _json_response(start_response, "200 OK", result)
             except ValidationError as exc:
                 session.rollback()
-                start_response("400 Bad Request", [("Content-Type", "application/json")])
-                return [json.dumps({"error": str(exc)}).encode()]
+                return _json_response(start_response, "400 Bad Request", {"error": str(exc)})
             except NotFoundError as exc:
                 session.rollback()
-                start_response("404 Not Found", [("Content-Type", "application/json")])
-                return [json.dumps({"error": str(exc)}).encode()]
+                return _json_response(start_response, "404 Not Found", {"error": str(exc)})
             except TraectError as exc:
                 session.rollback()
-                start_response("422 Unprocessable Entity", [("Content-Type", "application/json")])
-                return [json.dumps({"error": str(exc)}).encode()]
+                return _json_response(start_response, "422 Unprocessable Entity", {"error": str(exc)})
+            except KeyError as exc:
+                session.rollback()
+                message = f"missing required field: {exc.args[0]}"
+                return _json_response(start_response, "400 Bad Request", {"error": message})
+            except (TypeError, ValueError) as exc:
+                session.rollback()
+                message = f"invalid request: {exc}" if str(exc) else "invalid request"
+                return _json_response(start_response, "400 Bad Request", {"error": message})
 
     return app
 
@@ -61,6 +65,11 @@ def build_app(database_url: str) -> Callable[[Mapping[str, Any], Callable[..., A
 def _respond(start_response: Callable[..., Any], status: str, content_type: str, body: str) -> list[bytes]:
     start_response(status, [("Content-Type", content_type), ("Cache-Control", "no-cache")])
     return [body.encode()]
+
+
+def _json_response(start_response: Callable[..., Any], status: str, payload: Any) -> list[bytes]:
+    body = json.dumps(payload, default=_json_default)
+    return _respond(start_response, status, "application/json; charset=utf-8", body)
 
 
 def _serve_root(
@@ -211,14 +220,18 @@ def _json_default(value: Any) -> Any:
 def _load_payload(body: bytes) -> dict[str, Any]:
     if not body:
         return {}
-    parsed = json.loads(body)
+    try:
+        parsed = json.loads(body)
+    except UnicodeDecodeError, json.JSONDecodeError:
+        raise ValidationError("request body must contain valid JSON")
     if not isinstance(parsed, dict):
         raise ValidationError("request body must be a JSON object")
     return cast(dict[str, Any], parsed)
 
 
 def main() -> None:
-    app = build_app("sqlite:///traect.db")
+    database_url = os.environ.get("TRAECT_DATABASE_URL", "sqlite:///traect.db")
+    app = build_app(database_url)
     with make_server("127.0.0.1", 8000, app) as server:
         print("Serving on http://127.0.0.1:8000")
         server.serve_forever()

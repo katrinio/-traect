@@ -23,6 +23,9 @@ traect = "traect.api.app:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+markers = [
+    "browser: end-to-end smoke tests that launch a local browser",
+]
 
 [tool.coverage.run]
 source = ["src"]
@@ -85,4 +88,5 @@ dev = [
     "pytest>=9.0.0,<10.0.0",
     "pytest-cov>=7.1.0,<8.0.0",
     "pre-commit>=4.6.0,<5.0.0",
+    "playwright (>=1.61.0,<2.0.0)",
 ]

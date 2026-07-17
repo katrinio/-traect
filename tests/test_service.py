@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from traect.api.app import build_app
@@ -16,12 +16,15 @@ from traect.domain.enums import WeekDomainMode, WeekDomainStatus
 
 
 @pytest.fixture
-def session() -> Session:
+def session() -> Iterator[Session]:
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     create_schema(engine)
     factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False, future=True)
-    with factory() as session:
-        yield session
+    try:
+        with factory() as session:
+            yield session
+    finally:
+        engine.dispose()
 
 
 def test_create_and_list_domains(session: Session) -> None:
@@ -135,6 +138,87 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
     assert len(week2.domain_states) == 2
 
 
+def test_week_derives_a_single_main_focus_from_domain_attention(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
+            WeekStateInput(health.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN),
+        ],
+    )
+
+    assert week.focus_domain_id == work.id
+
+
+def test_week_rejects_multiple_primary_focus_domains(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    with pytest.raises(ValidationError, match="only one primary focus"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
+                WeekStateInput(health.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS),
+            ],
+        )
+
+
+def test_week_rejects_domain_context_over_300_characters(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match="300 characters or fewer"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN, "x" * 301)],
+        )
+
+
+def test_week_rejects_what_gave_way_without_a_main_focus(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match="requires a main focus"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            sacrificed_domain_id=work.id,
+            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.MAINTAIN)],
+        )
+
+
+def test_week_rejects_trade_off_reason_without_what_gave_way(session: Session) -> None:
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match="requires a domain that gave way"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            sacrifice_reason="Release",
+            states=[WeekStateInput(work.id, WeekDomainStatus.GOOD, WeekDomainMode.FOCUS)],
+        )
+
+
 def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session: Session) -> None:
     service = TraectService(session)
     workspace = service.create_workspace("Life")
@@ -246,6 +330,70 @@ def test_root_navigation_exposes_only_current_and_domains(tmp_path: Path) -> Non
     assert "Domains" in response["body"]
     assert "Workspace Setup / Domains" not in response["body"]
     assert "Workspace setup" not in response["body"]
+
+
+def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    workspace = _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+    assert workspace["status"].startswith("200")
+
+    archived = _request(app, "POST", "/domains/1/archive")
+    assert archived["status"].startswith("200")
+
+    replacement = _request(app, "POST", "/workspaces/1/domains", body=b'{"name":"Work"}')
+    assert replacement["status"].startswith("200")
+
+
+def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
+    database = tmp_path / "legacy.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    create_schema(engine)
+    with engine.begin() as connection:
+        connection.execute(text("INSERT INTO workspace (name) VALUES ('Existing workspace')"))
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+    engine.dispose()
+
+    app = build_app(f"sqlite:///{database}")
+
+    response = _request(app, "GET", "/workspaces/current")
+    assert response["status"].startswith("200")
+    assert "Existing workspace" in response["body"]
+    verification_engine = create_engine(f"sqlite:///{database}")
+    try:
+        with verification_engine.connect() as connection:
+            assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
+                "0003_active_domain_names"
+            )
+    finally:
+        verification_engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_error"),
+    [
+        (b"not json", "request body must contain valid JSON"),
+        (b"[]", "request body must be a JSON object"),
+        (b"{}", "missing required field: name"),
+    ],
+)
+def test_invalid_workspace_requests_return_json_errors(tmp_path: Path, body: bytes, expected_error: str) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+
+    response = _request(app, "POST", "/workspaces", body=body)
+
+    assert response["status"].startswith("400")
+    assert expected_error in response["body"]
+    assert "application/json" in response["headers"]
+
+
+def test_invalid_week_values_return_json_error(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+
+    response = _request(app, "PUT", "/workspaces/1/weeks/2026/99", body=b"{}")
+
+    assert response["status"].startswith("400")
+    assert "error" in response["body"]
 
 
 def _request(

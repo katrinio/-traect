@@ -39,24 +39,33 @@
 
         <section id="edit-view" class="hidden">
           <div class="view-title">Edit review</div>
+          <p class="hint review-intro">Describe what actually happened this week. This is a snapshot, not a plan.</p>
 
           <form id="review-form" class="split">
-            <section>
-              <div class="domains" id="review-domains"></div>
-            </section>
-
             <section class="week-summary">
-              <h3 class="section-title">Week</h3>
+              <h3 class="section-title">Weekly trade-off</h3>
               <div class="summary-grid">
-                <label>Focus
+                <label>Main focus
                   <select name="focus_domain_id"></select>
                 </label>
-                <label>Sacrificed
+                <label>What gave way
                   <select name="sacrificed_domain_id"></select>
                 </label>
-                <label>Reason<textarea name="sacrifice_reason"></textarea></label>
-                <label>Notes<textarea name="notes"></textarea></label>
+                <label>Why
+                  <input type="text" name="sacrifice_reason" maxlength="240" placeholder="What caused this trade-off?">
+                </label>
+                <label>Week notes
+                  <textarea name="notes" placeholder="Anything else about the week"></textarea>
+                </label>
               </div>
+            </section>
+
+            <section class="domain-review">
+              <div>
+                <h3 class="section-title">Domains</h3>
+                <p class="hint">Record the attention each domain received and its condition now.</p>
+              </div>
+              <div class="domains" id="review-domains"></div>
             </section>
 
             <div class="actions">
@@ -85,6 +94,6 @@
     <script>
       window.TRAECT_API_BASE = "";
     </script>
-    <script src="/app.js" type="module"></script>
+    <script src="/app.js?v=20260717-review-flow-4" type="module"></script>
   </body>
 </html>
