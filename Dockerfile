@@ -24,15 +24,17 @@ RUN apt-get update \
       libcups2 libxkbcommon0 libxrandr2 libgbm1 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN poetry install --no-root
+RUN poetry install
 
 COPY README.md alembic.ini ./
 COPY src ./src
 COPY migrations ./migrations
 COPY tests ./tests
 
-RUN poetry install \
-    && poetry run playwright install --with-deps chromium
+RUN poetry install --with dev
+
+# Pre-download Playwright browsers to avoid CI download delays
+RUN poetry run playwright install --with-deps chromium
 
 # Production stage
 FROM base AS production
