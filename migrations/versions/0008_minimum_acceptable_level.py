@@ -15,7 +15,7 @@ from traect.db.base import Base
 from traect.domain import models as _models  # noqa: F401
 
 revision = "0008_minimum_acceptable_level"
-down_revision = "0005_full_schema"
+down_revision = None
 branch_labels = None
 depends_on = None
 
