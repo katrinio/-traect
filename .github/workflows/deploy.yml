@@ -61,7 +61,8 @@ jobs:
             cd ~/projects/traect
 
             # Clean up any permission issues from previous runs
-            sudo rm -rf data/.gitkeep 2>/dev/null || true
+            sudo chmod -R u+w data/ 2>/dev/null || true
+            sudo rm -rf data/ 2>/dev/null || true
 
             git fetch origin main
             git reset --hard origin/main
