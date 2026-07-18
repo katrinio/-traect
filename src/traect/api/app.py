@@ -15,6 +15,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from traect.api.routes import dispatch
+from traect.api.version import get_version_string
 from traect.app.database import make_engine, make_session_factory, migrate_schema
 from traect.app.errors import ConflictError, NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService
@@ -105,15 +106,34 @@ def _serve_root(
         workspace_exists = session.execute(select(Workspace.id)).first() is not None
     template = "templates/app.html" if workspace_exists else "templates/setup.html"
     body = (WEB_ROOT / template).read_text(encoding="utf-8")
+    version = get_version_string()
+    body = _inject_version(body, version)
     return _respond(start_response, "200 OK", "text/html; charset=utf-8", body)
+
+
+def _inject_version(html: str, version: str) -> str:
+    """Inject version query parameter into static asset URLs for cache busting."""
+    replacements = [
+        ('href="/tokens.css"', f'href="/tokens.css?v={version}"'),
+        ('href="/typography.css"', f'href="/typography.css?v={version}"'),
+        ('href="/layout.css"', f'href="/layout.css?v={version}"'),
+        ('href="/components.css"', f'href="/components.css?v={version}"'),
+        ('src="/app.js', f'src="/app.js?v={version}'),
+        ('href="/sw.js', f'href="/sw.js?v={version}'),
+    ]
+    for old, new in replacements:
+        html = html.replace(old, new)
+    return html
 
 
 def _serve_static(start_response: Callable[..., Any], method: str, path: str) -> list[bytes] | None:
     if method != "GET":
         return None
-    if path.startswith("/js/"):
+    # Remove version query parameter for file lookup
+    clean_path = path.split("?")[0]
+    if clean_path.startswith("/js/"):
         static_root = (WEB_ROOT / "static" / "js").resolve()
-        candidate = (WEB_ROOT / "static" / path.removeprefix("/")).resolve()
+        candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
         if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix == ".js":
             body = candidate.read_text(encoding="utf-8")
             return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", body)
@@ -128,9 +148,9 @@ def _serve_static(start_response: Callable[..., Any], method: str, path: str) ->
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
         "/icon.svg": ("static/icon.svg", "image/svg+xml"),
     }
-    if path not in mapping:
+    if clean_path not in mapping:
         return None
-    relative_path, content_type = mapping[path]
+    relative_path, content_type = mapping[clean_path]
     body = (WEB_ROOT / relative_path).read_text(encoding="utf-8")
     return _respond(start_response, "200 OK", content_type, body)
 
