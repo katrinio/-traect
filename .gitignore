@@ -219,5 +219,4 @@ __marimo__/
 /traect.db
 /BACKLOG.md
 .env
-data/*
-!data/.gitkeep
+data/
