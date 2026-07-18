@@ -60,15 +60,16 @@ jobs:
             set -euo pipefail
             cd ~/projects/traect
 
-            # Clean up any permission issues from previous runs
-            sudo chmod -R u+w data/ 2>/dev/null || true
-            sudo rm -rf data/ 2>/dev/null || true
-
             git fetch origin main
             git reset --hard origin/main
 
-            docker compose pull traect
-            docker compose up -d --remove-orphans
+            docker compose down --remove-orphans
+            docker compose build
+
+            echo "Upgrading database to latest migration..."
+            docker compose run --rm traect alembic upgrade head
+
+            docker compose up -d
 
             for i in {1..10}; do
               if curl --fail --silent --show-error http://127.0.0.1:8012/health; then
@@ -80,6 +81,6 @@ jobs:
               sleep 3
             done
 
-            docker compose -f docker-compose.yml ps
-            docker compose -f docker-compose.yml logs --tail=100 traect
+            docker compose ps
+            docker compose logs --tail=50 traect
             exit 1
