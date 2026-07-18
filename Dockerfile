@@ -1,4 +1,4 @@
-FROM python:3.14-slim as base
+FROM python:3.14-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -16,7 +16,7 @@ RUN apt-get update \
 COPY pyproject.toml poetry.lock ./
 
 # Test stage: includes dev dependencies and Playwright/Chromium
-FROM base as test
+FROM base AS test
 
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes \
@@ -35,7 +35,7 @@ RUN poetry install \
     && poetry run playwright install --with-deps chromium
 
 # Production stage
-FROM base as production
+FROM base AS production
 
 ENV TRAECT_HOST=0.0.0.0 \
     TRAECT_PORT=8000 \
