@@ -18,6 +18,8 @@ COPY pyproject.toml poetry.lock ./
 # Test stage: includes dev dependencies and Playwright/Chromium
 FROM base AS test
 
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
+
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes \
       libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 \
@@ -32,7 +34,8 @@ COPY tests ./tests
 RUN poetry install --with dev
 
 # Pre-download Playwright browsers to avoid CI download delays
-RUN poetry run playwright install --with-deps chromium
+RUN poetry run playwright install chromium --with-deps && \
+    ls -la ~/.cache/ms-playwright/
 
 # Production stage
 FROM base AS production
