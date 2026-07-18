@@ -60,6 +60,9 @@ jobs:
             set -euo pipefail
             cd ~/projects/traect
 
+            # Remove problematic gitkeep before reset
+            rm -f data/.gitkeep 2>/dev/null || true
+
             git fetch origin main
             git reset --hard origin/main
 
