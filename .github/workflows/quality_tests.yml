@@ -12,6 +12,8 @@ jobs:
     container:
       image: ghcr.io/${{ github.repository_owner }}/traect:test-latest
       options: --user root
+      env:
+        PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
 
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +30,8 @@ jobs:
     container:
       image: ghcr.io/${{ github.repository_owner }}/traect:test-latest
       options: --user root
+      env:
+        PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
 
     steps:
       - uses: actions/checkout@v4

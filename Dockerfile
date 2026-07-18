@@ -18,7 +18,8 @@ COPY pyproject.toml poetry.lock ./
 # Test stage: includes dev dependencies and Playwright/Chromium
 FROM base AS test
 
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=0
 
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes \
@@ -35,7 +36,7 @@ RUN poetry install --with dev
 
 # Pre-download Playwright browsers to avoid CI download delays
 RUN poetry run playwright install chromium --with-deps && \
-    ls -la ~/.cache/ms-playwright/
+    ls -la /ms-playwright/ || echo "Browsers installed in default cache"
 
 # Production stage
 FROM base AS production
