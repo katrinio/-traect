@@ -176,13 +176,20 @@ function render() {
 
 function renderCurrentMetadata() {
   if (el.weekMeta && state.currentWeek) {
-    el.weekMeta.textContent = `Week ${state.currentWeek.iso_week}, ${state.currentWeek.iso_year}`;
-  }
-  if (el.currentLifecycle) {
-    if (!state.currentReview) el.currentLifecycle.textContent = "";
-    else if (state.currentReview.lifecycle === "provisional") {
-      el.currentLifecycle.textContent = "Provisional · changes can still be recorded this week";
-    } else el.currentLifecycle.textContent = "Final · this review is read-only";
+    const weekLabel = `Week ${state.currentWeek.iso_week}, ${state.currentWeek.iso_year}`;
+    let statusText = "";
+    if (state.currentReview) {
+      if (state.currentReview.lifecycle === "provisional") {
+        statusText = "Provisional";
+      } else {
+        statusText = "Final";
+      }
+    }
+    if (statusText) {
+      el.weekMeta.innerHTML = `${weekLabel} <span class="lifecycle-meta">· ${statusText}</span>`;
+    } else {
+      el.weekMeta.textContent = weekLabel;
+    }
   }
   if (el.editReviewButton) el.editReviewButton.textContent = state.currentReview ? "Edit review" : "Start review";
 }
