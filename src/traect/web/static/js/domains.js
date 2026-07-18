@@ -10,27 +10,57 @@ export function renderDomainManagement(elements, domains, callbacks) {
 }
 
 function renderActiveDomainRow(domain, callbacks) {
-  const row = document.createElement("div");
-  row.className = "domain-row domain-config-row";
-  row.dataset.id = String(domain.id);
-  const descriptionId = `minimum-level-help-${domain.id}`;
-  row.innerHTML = `
+  const details = document.createElement("details");
+  details.className = "domain-accordion";
+  details.dataset.id = String(domain.id);
+
+  const summary = document.createElement("summary");
+  summary.className = "domain-accordion-summary";
+
+  const arrow = document.createElement("span");
+  arrow.className = "domain-accordion-arrow";
+  arrow.setAttribute("aria-hidden", "true");
+  arrow.textContent = "▼";
+  summary.appendChild(arrow);
+
+  const summaryContent = document.createElement("div");
+  summaryContent.className = "domain-accordion-summary-content";
+  summaryContent.innerHTML = `
     <span class="drag-handle" aria-hidden="true">⋮⋮</span>
-    <input class="inline-input" type="text" value="${escapeHtml(domain.name)}" autocomplete="off" aria-label="Domain name">
-    <button class="ghost row-action" type="button" data-archive="${domain.id}">Archive</button>
-    <label class="minimum-level-field">Minimum acceptable level
-      <textarea maxlength="${minimumAcceptableLevelLimit}" aria-describedby="${descriptionId}"
-        placeholder="What is the minimum state that still feels acceptable?"></textarea>
-      <span class="hint" id="${descriptionId}">A short description of what still counts as acceptable for this Domain.</span>
-    </label>
+    <span class="domain-accordion-name">${escapeHtml(domain.name)}</span>
   `;
-  const input = row.querySelector("input");
-  const minimumLevel = row.querySelector("textarea");
+  summary.appendChild(summaryContent);
+
+  const archiveButton = document.createElement("button");
+  archiveButton.className = "ghost row-action";
+  archiveButton.type = "button";
+  archiveButton.setAttribute("data-archive", String(domain.id));
+  archiveButton.textContent = "Archive";
+  summary.appendChild(archiveButton);
+
+  const content = document.createElement("div");
+  content.className = "domain-accordion-content";
+  const minimumLevelField = document.createElement("label");
+  minimumLevelField.className = "minimum-level-field";
+  minimumLevelField.innerHTML = `
+    Minimum acceptable level
+    <textarea maxlength="${minimumAcceptableLevelLimit}"
+      placeholder="What is the minimum state that still feels acceptable?"></textarea>
+  `;
+
+  details.append(summary, content);
+  content.appendChild(minimumLevelField);
+
+  const minimumLevel = minimumLevelField.querySelector("textarea");
   minimumLevel.value = domain.minimum_acceptable_level || "";
-  input.addEventListener("change", () => callbacks.onRename(domain.id, input.value));
   minimumLevel.addEventListener("change", () => callbacks.onMinimumLevel(domain.id, minimumLevel.value));
-  row.querySelector("[data-archive]").addEventListener("click", () => callbacks.onArchive(domain.id));
-  return row;
+  archiveButton.addEventListener("click", () => callbacks.onArchive(domain.id));
+
+  // Prevent drag handle from triggering details expand
+  const dragHandle = summaryContent.querySelector(".drag-handle");
+  dragHandle.addEventListener("pointerdown", (e) => e.stopPropagation(), true);
+
+  return details;
 }
 
 function renderArchivedDomainRow(domain, callbacks) {

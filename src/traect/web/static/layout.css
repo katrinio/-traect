@@ -697,6 +697,65 @@ section {
   border-bottom: 0;
 }
 
+.domain-accordion {
+  display: block;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.domain-accordion:last-child {
+  border-bottom: 0;
+}
+
+.domain-accordion-summary {
+  padding: var(--space-2) 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.domain-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.domain-accordion-arrow {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+  width: 1rem;
+  display: inline-block;
+  margin-right: var(--space-3);
+  transition: transform 120ms ease;
+  vertical-align: baseline;
+}
+
+.domain-accordion:not([open]) .domain-accordion-arrow {
+  transform: rotate(-90deg);
+}
+
+.domain-accordion-summary-content {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.domain-accordion-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.domain-accordion-content {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
+  padding-left: 1rem;
+}
+
 .domain-row .inline-input,
 .domain-row .domain-name-static {
   flex: 1;
@@ -710,11 +769,16 @@ section {
 }
 
 .minimum-level-field {
-  grid-column: 2 / -1;
+  display: grid;
+  gap: var(--space-1);
 }
 
 .minimum-level-field textarea {
-  min-height: 5rem;
+  min-height: 4rem;
+}
+
+.domain-accordion-content .minimum-level-field {
+  grid-column: auto;
 }
 
 .minimum-level-context {
