@@ -1,4 +1,4 @@
-name: Quality tests
+name: 🪛 Quality tests
 
 on:
   push:
@@ -7,21 +7,14 @@ on:
 
 jobs:
   code-style:
-    name: Code style
+    name: 💅 Code style
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:test-latest
+      options: --user root
 
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
+      - uses: actions/checkout@v4
 
       - name: Run Ruff
         run: poetry run ruff check .
@@ -30,24 +23,14 @@ jobs:
         run: poetry run mypy src
 
   tests-and-coverage:
-    name: Tests and coverage
+    name: 🪛 Tests and coverage
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}:test-latest
+      options: --user root
 
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - name: Install Poetry
-        run: pipx install poetry
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
-
-      - name: Install Chromium for browser smoke tests
-        run: poetry run playwright install --with-deps chromium
+      - uses: actions/checkout@v4
 
       - name: Run tests and coverage
         run: |
