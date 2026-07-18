@@ -24,8 +24,6 @@ RUN apt-get update \
       libcups2 libxkbcommon0 libxrandr2 libgbm1 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN poetry install
-
 COPY README.md alembic.ini ./
 COPY src ./src
 COPY migrations ./migrations
@@ -42,8 +40,6 @@ FROM base AS production
 ENV TRAECT_HOST=0.0.0.0 \
     TRAECT_PORT=8000 \
     TRAECT_DATABASE_URL=sqlite:////data/traect.db
-
-RUN poetry install --only main --no-root
 
 COPY README.md alembic.ini ./
 COPY src ./src
