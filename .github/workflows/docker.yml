@@ -35,7 +35,11 @@ jobs:
 
       - name: Extract repo name
         id: repo
-        run: echo "name=$(echo ${{ github.repository }} | cut -d'/' -f2)" >> $GITHUB_OUTPUT
+        run: |
+          repo_name=$(echo ${{ github.repository }} | cut -d'/' -f2)
+          # Remove leading dash if present
+          repo_name=${repo_name#-}
+          echo "name=$repo_name" >> $GITHUB_OUTPUT
 
       - name: Build and push production image
         uses: docker/build-push-action@v5
@@ -44,8 +48,8 @@ jobs:
           push: true
           target: production
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -56,7 +60,7 @@ jobs:
           push: true
           target: test
           tags: |
-            ghcr.io/${{ github.repository }}:test-latest
-            ghcr.io/${{ github.repository }}:test-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:test-latest
+            ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:test-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

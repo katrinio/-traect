@@ -10,7 +10,7 @@ jobs:
     name: 💅 Code style
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}:test-latest
+      image: ghcr.io/${{ github.repository_owner }}/traect:test-latest
       options: --user root
 
     steps:
@@ -26,7 +26,7 @@ jobs:
     name: 🪛 Tests and coverage
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}:test-latest
+      image: ghcr.io/${{ github.repository_owner }}/traect:test-latest
       options: --user root
 
     steps:
