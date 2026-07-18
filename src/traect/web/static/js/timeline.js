@@ -97,7 +97,7 @@ function renderTimelineWeek(review, index, onEdit) {
   const details = document.createElement("details");
   details.className = "timeline-week";
   details.id = `timeline-week-${review.id}`;
-  details.open = index < 3;
+  details.open = index === 0;
 
   const summary = document.createElement("summary");
   summary.className = "timeline-week-summary";

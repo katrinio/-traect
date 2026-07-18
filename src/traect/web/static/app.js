@@ -35,7 +35,8 @@ const el = {
   mainNav: document.getElementById("main-nav"),
   setupView: document.getElementById("setup-view"),
   currentView: document.getElementById("current-view"),
-  timelineView: document.getElementById("timeline-view"),
+  historyView: document.getElementById("history-view"),
+  patternsView: document.getElementById("patterns-view"),
   editView: document.getElementById("edit-view"),
   manageView: document.getElementById("manage-view"),
   weekMeta: document.getElementById("week-meta"),
@@ -43,8 +44,8 @@ const el = {
   currentTradeoff: document.getElementById("current-tradeoff"),
   currentTradeoffContent: document.getElementById("current-tradeoff-content"),
   currentGroups: document.getElementById("current-groups"),
-  timelineEntries: document.getElementById("timeline-entries"),
-  timelineStatus: document.getElementById("timeline-status"),
+  historyEntries: document.getElementById("history-entries"),
+  historyStatus: document.getElementById("history-status"),
   focusHistoryContent: document.getElementById("focus-history-content"),
   focusHistoryStatus: document.getElementById("focus-history-status"),
   focusHistoryRange: document.getElementById("focus-history-range"),
@@ -166,7 +167,8 @@ function render() {
     state.currentReview,
     state.domains,
   );
-  renderTimelineView();
+  renderHistoryView();
+  renderPatternsView();
   renderReview(el.reviewDomains, reviewDomains, state.currentReview);
   renderDomainsView();
   showOnly(state.activeView);
@@ -196,7 +198,8 @@ function renderNavigation() {
 function showOnly(view) {
   el.setupView?.classList.toggle("hidden", view !== "setup");
   el.currentView?.classList.toggle("hidden", view !== "current");
-  el.timelineView?.classList.toggle("hidden", view !== "timeline");
+  el.historyView?.classList.toggle("hidden", view !== "history");
+  el.patternsView?.classList.toggle("hidden", view !== "patterns");
   el.editView?.classList.toggle("hidden", view !== "edit");
   el.manageView?.classList.toggle("hidden", view !== "domains");
 }
@@ -204,15 +207,16 @@ function showOnly(view) {
 function setActiveView(view) {
   state.activeView = view;
   render();
-  if (view === "timeline") {
+  if (view === "history") {
     if (state.timeline.items === null && !state.timeline.loading) loadTimeline();
+  } else if (view === "patterns") {
     loadActiveHistory();
   }
 }
 
 function setHistoryView(view) {
   state.historyView = view;
-  renderTimelineView();
+  renderPatternsView();
   loadActiveHistory();
 }
 
@@ -244,10 +248,9 @@ function moveSetupDomain(index, offset) {
   renderSetupView();
 }
 
-function renderTimelineView() {
-  renderHistoryTabs();
+function renderHistoryView() {
   renderTimeline(
-    { entries: el.timelineEntries, status: el.timelineStatus },
+    { entries: el.historyEntries, status: el.historyStatus },
     state.timeline,
     {
       onRetry: loadTimeline,
@@ -255,6 +258,10 @@ function renderTimelineView() {
       onEdit: () => setActiveView("edit"),
     },
   );
+}
+
+function renderPatternsView() {
+  renderHistoryTabs();
   renderFocusHistory(
     { content: el.focusHistoryContent, status: el.focusHistoryStatus, range: el.focusHistoryRange },
     state.focusHistory,
@@ -291,7 +298,7 @@ function renderHistoryTabs() {
 async function loadFocusHistory() {
   state.focusHistory.loading = true;
   state.focusHistory.error = null;
-  renderTimelineView();
+  renderPatternsView();
   try {
     const range = encodeURIComponent(state.focusHistory.range);
     const payload = await fetchJSON(`/workspaces/${state.workspace.id}/history/focus?reviewed_weeks=${range}`);
@@ -300,14 +307,14 @@ async function loadFocusHistory() {
     state.focusHistory.error = error.message || "Focus history could not be loaded.";
   } finally {
     state.focusHistory.loading = false;
-    renderTimelineView();
+    renderPatternsView();
   }
 }
 
 async function loadConditionHistory() {
   state.conditionHistory.loading = true;
   state.conditionHistory.error = null;
-  renderTimelineView();
+  renderPatternsView();
   try {
     const range = encodeURIComponent(state.focusHistory.range);
     const domain = state.conditionHistory.domainId === null
@@ -322,14 +329,14 @@ async function loadConditionHistory() {
     state.conditionHistory.error = error.message || "Condition history could not be loaded.";
   } finally {
     state.conditionHistory.loading = false;
-    renderTimelineView();
+    renderPatternsView();
   }
 }
 
 async function loadTradeoffHistory() {
   state.tradeoffHistory.loading = true;
   state.tradeoffHistory.error = null;
-  renderTimelineView();
+  renderPatternsView();
   try {
     const range = encodeURIComponent(state.focusHistory.range);
     const payload = await fetchJSON(
@@ -340,7 +347,7 @@ async function loadTradeoffHistory() {
     state.tradeoffHistory.error = error.message || "Trade-off patterns could not be loaded.";
   } finally {
     state.tradeoffHistory.loading = false;
-    renderTimelineView();
+    renderPatternsView();
   }
 }
 

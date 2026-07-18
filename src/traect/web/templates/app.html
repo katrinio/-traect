@@ -23,7 +23,8 @@
 
       <nav aria-label="Sections" id="main-nav">
         <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
-        <button class="tab" type="button" data-view="timeline" aria-selected="false">Timeline</button>
+        <button class="tab" type="button" data-view="history" aria-selected="false">History</button>
+        <button class="tab" type="button" data-view="patterns" aria-selected="false">Patterns</button>
         <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
       </nav>
 
@@ -46,16 +47,26 @@
           </div>
         </section>
 
-        <section id="timeline-view" class="timeline hidden" aria-labelledby="timeline-title">
+        <section id="history-view" class="history hidden" aria-labelledby="history-title">
           <div>
-            <h2 class="view-title" id="timeline-title">Timeline</h2>
+            <h2 class="view-title" id="history-title">History</h2>
             <p class="hint">Saved weekly snapshots in reverse chronological order.</p>
           </div>
-          <section class="focus-history history-panel" aria-labelledby="history-title">
+          <h3 class="section-title">Weekly reviews</h3>
+          <div class="status" id="history-status" role="status"></div>
+          <div class="history-entries" id="history-entries"></div>
+        </section>
+
+        <section id="patterns-view" class="patterns hidden" aria-labelledby="patterns-title">
+          <div>
+            <h2 class="view-title" id="patterns-title">Patterns</h2>
+            <p class="hint">Accumulated observations across multiple reviews.</p>
+          </div>
+          <section class="focus-history history-panel" aria-labelledby="patterns-analytics-title">
             <div class="focus-history-heading">
               <div>
-                <h3 class="section-title" id="history-title">History</h3>
-                <p class="hint">Recorded Focus, Condition, and trade-offs across saved weekly reviews.</p>
+                <h3 class="section-title" id="patterns-analytics-title">Analytics</h3>
+                <p class="hint">Focus, Condition, and trade-off patterns across saved weekly reviews.</p>
               </div>
               <label class="focus-history-range">Range
                 <select id="focus-history-range" aria-controls="focus-history-content condition-history-content tradeoff-history-content">
@@ -66,7 +77,7 @@
                 </select>
               </label>
             </div>
-            <div class="history-tabs" role="tablist" aria-label="History type">
+            <div class="history-tabs" role="tablist" aria-label="Pattern type">
               <button class="tab" id="history-focus-tab" type="button" role="tab"
                 aria-selected="true" aria-controls="focus-history-panel">Focus</button>
               <button class="tab" id="history-condition-tab" type="button" role="tab"
@@ -76,7 +87,7 @@
             </div>
             <section id="focus-history-panel" role="tabpanel" aria-labelledby="history-focus-tab">
               <div>
-                <h4 class="section-title" id="focus-history-title">Focus history</h4>
+                <h4 class="section-title" id="focus-history-title">Focus patterns</h4>
                 <p class="hint">Where Primary focus was recorded across saved weekly reviews.</p>
               </div>
               <div class="status" id="focus-history-status" role="status"></div>
@@ -95,7 +106,7 @@
               aria-labelledby="history-condition-tab">
               <div class="condition-history-heading">
                 <div>
-                  <h4 class="section-title">Condition history</h4>
+                  <h4 class="section-title">Condition patterns</h4>
                   <p class="hint">How a Domain’s recorded Condition appears across saved reviews.</p>
                 </div>
                 <label class="condition-domain-select">Domain
@@ -106,9 +117,6 @@
               <div class="condition-history-content" id="condition-history-content"></div>
             </section>
           </section>
-          <h3 class="section-title">Weekly snapshots</h3>
-          <div class="status" id="timeline-status" role="status"></div>
-          <div class="timeline-entries" id="timeline-entries"></div>
         </section>
 
         <section id="edit-view" class="hidden">

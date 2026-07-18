@@ -73,12 +73,16 @@ section {
   font-size: 0.82rem;
 }
 
+.history,
+.patterns,
 .timeline,
 .timeline-entries,
 .timeline-groups {
   display: grid;
 }
 
+.history,
+.patterns,
 .timeline {
   gap: var(--space-4);
 }
