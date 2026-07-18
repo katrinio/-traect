@@ -793,7 +793,7 @@ section {
   header {
     align-items: start;
     flex-direction: column;
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-1);
     padding-bottom: var(--space-2);
     border-bottom: none;
   }
@@ -801,7 +801,7 @@ section {
   nav {
     overflow-x: auto;
     padding-bottom: var(--space-1);
-    margin: var(--space-2) 0 var(--space-3);
+    margin: 0 0 var(--space-3);
   }
 
   .domain-grid {
