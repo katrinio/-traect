@@ -48,8 +48,6 @@ export function renderTradeoffHistory(elements, history, callbacks) {
     sections.push(renderFocusBreakdowns(data.focus_breakdowns));
     sections.push(renderSacrificeBreakdowns(data.sacrifice_breakdowns));
   }
-  sections.push(renderChronology(data.weeks));
-  if (data.observations.length) sections.push(renderObservations(data.observations));
   elements.content.replaceChildren(...sections);
 }
 
@@ -69,12 +67,9 @@ function renderSummary(summary) {
   const list = document.createElement("dl");
   list.className = "tradeoff-history-summary";
   for (const [label, value] of [
-    ["Reviewed weeks", summary.reviewed_week_count],
+    ["Valid focus–trade-off pairs", summary.valid_pair_count],
     ["With Primary focus", summary.focus_week_count],
     ["With What gave way", summary.sacrifice_week_count],
-    ["Valid focus–trade-off pairs", summary.valid_pair_count],
-    ["Focus without trade-off", summary.focus_without_sacrifice_count],
-    ["Excluded records", summary.excluded_pair_count],
   ]) appendMetric(list, label, value);
   return list;
 }
@@ -166,18 +161,16 @@ function renderPair(pair, denominator) {
   const detail = document.createElement("div");
   detail.className = "tradeoff-pair-detail";
   const recent = document.createElement("p");
-  recent.textContent = `Most recent record: ${formatWeekLabel(pair.most_recent)}.`;
-  const weeks = document.createElement("ul");
-  for (const week of pair.weeks) weeks.appendChild(renderWeekLink(week, "Open trade-off review"));
-  detail.append(recent, weeks);
+  recent.textContent = `Most recent: ${formatWeekLabel(pair.most_recent)}.`;
+  detail.appendChild(recent);
   details.append(summary, detail);
   return details;
 }
 
 function renderFocusBreakdowns(breakdowns) {
   const section = makeSection(
-    "By Primary focus",
-    "Shares use all valid weeks with the selected Domain as Primary focus, including no trade-off.",
+    "▶ By Primary focus",
+    "Expand to see what gave way when each Domain was Primary focus.",
   );
   for (const breakdown of breakdowns) {
     const details = document.createElement("details");
@@ -203,7 +196,7 @@ function renderFocusBreakdowns(breakdowns) {
 }
 
 function renderSacrificeBreakdowns(breakdowns) {
-  const section = makeSection("By What gave way", "Primary-focus Domains recorded in the same weekly reviews.");
+  const section = makeSection("▶ By What gave way", "Expand to see what was Primary focus when each Domain gave way.");
   for (const breakdown of breakdowns) {
     const details = document.createElement("details");
     details.className = "tradeoff-breakdown";
