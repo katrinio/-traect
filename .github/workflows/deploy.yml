@@ -63,8 +63,10 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            docker compose down --remove-orphans
-            docker compose build
+            docker compose down --remove-orphans --volumes
+            docker system prune -f
+            docker compose pull
+            docker compose build --no-cache
 
             echo "Upgrading database to latest migration..."
             docker compose run --rm traect alembic upgrade head
