@@ -55,21 +55,17 @@ export function renderConditionHistory(elements, state, callbacks) {
   if (history.summary.reviewed_week_count === 0) {
     sections.push(renderEmptyHistory());
   } else {
-    sections.push(renderDomainHeader(history.domain), renderLatest(history.summary.latest_record));
+    sections.push(renderLatest(history.summary.latest_record));
     if (history.summary.excluded_state_count > 0) {
       sections.push(renderIntegrityNotice(history.summary.excluded_state_count, "Condition record"));
     }
-    sections.push(renderCoverage(history.summary));
     if (history.summary.recorded_state_count === 0) {
       sections.push(renderNoRecordedCondition(history.summary.excluded_state_count));
     } else {
+      sections.push(renderTimeline(history.weeks));
       sections.push(renderDistribution(history.summary));
     }
-    sections.push(renderSequence(history.weeks));
-    sections.push(renderPausedSequences(history.paused_sequences));
-    if (history.transitions.length) sections.push(renderTransitions(history.transitions));
-    if (history.runs.length) sections.push(renderRuns(history.runs));
-    if (history.observations.length) sections.push(renderObservations(history.observations));
+    sections.push(renderPausedSequences(history.paused_sequences, history.weeks));
   }
   elements.content.replaceChildren(...sections);
 }
@@ -139,21 +135,42 @@ function renderLatest(latest) {
 function renderDistribution(summary) {
   const section = document.createElement("section");
   section.className = "condition-distribution";
+
+  const headingContainer = document.createElement("div");
+  headingContainer.className = "condition-distribution-heading";
   const heading = document.createElement("h4");
   heading.className = "section-title";
-  heading.textContent = "Recorded Conditions";
+  heading.textContent = "Recorded states";
+  const count = document.createElement("span");
+  count.className = "condition-distribution-count";
+  count.textContent = String(summary.recorded_state_count);
+  headingContainer.append(heading, count);
+
   const list = document.createElement("dl");
   list.className = "condition-summary";
-  appendMetric(list, "Recorded states", String(summary.recorded_state_count));
+
   for (const condition of ["stable", "at_risk", "critical"]) {
     const presentation = conditionPresentation[condition];
-    appendMetric(
-      list,
-      presentation.label,
-      `${summary.counts[condition]} · ${formatPercentage(summary.shares[condition])}`,
-    );
+    const row = document.createElement("div");
+    row.className = "condition-summary-row";
+
+    const iconCell = document.createElement("span");
+    iconCell.className = `condition-summary-icon condition-state-${condition}`;
+    iconCell.textContent = presentation.symbol;
+
+    const labelCell = document.createElement("dt");
+    labelCell.className = "condition-summary-label";
+    labelCell.textContent = presentation.label;
+
+    const valueCell = document.createElement("dd");
+    valueCell.className = "condition-summary-value";
+    valueCell.textContent = `${summary.counts[condition]} · ${formatPercentage(summary.shares[condition])}`;
+
+    row.append(iconCell, labelCell, valueCell);
+    list.appendChild(row);
   }
-  section.append(heading, list);
+
+  section.append(headingContainer, list);
   return section;
 }
 
@@ -189,6 +206,79 @@ function renderNoRecordedCondition(excludedCount) {
   return notice;
 }
 
+function renderTimeline(weeks) {
+  const section = document.createElement("section");
+  section.className = "condition-timeline";
+  const heading = document.createElement("h4");
+  heading.className = "section-title";
+  heading.textContent = "Condition timeline";
+
+  const container = document.createElement("div");
+  container.className = "condition-timeline-container";
+
+  // Week numbers row
+  const numberRow = document.createElement("div");
+  numberRow.className = "condition-timeline-numbers";
+
+  // Timeline markers row
+  const timelineRow = document.createElement("div");
+  timelineRow.className = "condition-timeline-markers";
+
+  for (const week of weeks) {
+    const numberCell = document.createElement("div");
+    numberCell.className = "condition-timeline-number";
+    numberCell.textContent = week.iso_week;
+    numberRow.appendChild(numberCell);
+
+    const marker = document.createElement("div");
+    marker.className = `condition-timeline-marker condition-timeline-${week.presence}`;
+
+    if (week.presence === "recorded") {
+      marker.className += ` condition-state-${week.condition}`;
+      const icon = document.createElement("span");
+      icon.className = "condition-marker-icon";
+      const presentation = conditionPresentation[week.condition];
+      icon.textContent = presentation.symbol;
+      marker.appendChild(icon);
+      marker.setAttribute("title", `${presentation.label} · Week ${week.iso_week}`);
+    } else if (week.presence === "absent") {
+      marker.textContent = "—";
+      marker.setAttribute("title", `Absent from snapshot · Week ${week.iso_week}`);
+    } else {
+      marker.textContent = "×";
+      marker.setAttribute("title", `Excluded historical state · Week ${week.iso_week}`);
+    }
+    timelineRow.appendChild(marker);
+  }
+
+  // Legend
+  const legend = document.createElement("div");
+  legend.className = "condition-timeline-legend";
+  const legendItems = [
+    { symbol: conditionPresentation.stable.symbol, label: "Stable", className: "condition-state-stable" },
+    { symbol: conditionPresentation.at_risk.symbol, label: "At risk", className: "condition-state-at_risk" },
+    { symbol: conditionPresentation.critical.symbol, label: "Critical", className: "condition-state-critical" },
+    { symbol: "—", label: "Paused", className: "condition-timeline-absent" },
+  ];
+
+  for (const item of legendItems) {
+    const legendItem = document.createElement("div");
+    legendItem.className = "condition-legend-item";
+    const icon = document.createElement("span");
+    icon.className = `condition-legend-icon ${item.className}`;
+    icon.textContent = item.symbol;
+    const label = document.createElement("span");
+    label.className = "condition-legend-label";
+    label.textContent = item.label;
+    legendItem.append(icon, label);
+    legend.appendChild(legendItem);
+  }
+
+  container.append(numberRow, timelineRow, legend);
+  section.append(heading, container);
+  return section;
+}
+
 function renderSequence(weeks) {
   const section = document.createElement("section");
   section.className = "condition-sequence";
@@ -204,16 +294,18 @@ function renderSequence(weeks) {
   return section;
 }
 
-function renderPausedSequences(sequences) {
+function renderPausedSequences(sequences, weeks) {
   const section = document.createElement("section");
   section.className = "paused-sequences";
   const heading = document.createElement("h4");
   heading.className = "section-title";
   heading.textContent = "Paused history";
   section.appendChild(heading);
+
   if (sequences.excluded_state_count > 0) {
     section.appendChild(renderIntegrityNotice(sequences.excluded_state_count, "Attention record"));
   }
+
   if (!sequences.streaks.length) {
     const empty = document.createElement("p");
     empty.className = "condition-history-empty";
@@ -236,22 +328,12 @@ function renderPausedSequences(sequences) {
       `${formatReviewedWeeks(sequences.longest_streak.length)} · ${formatWeekRange(sequences.longest_streak)}`,
     ),
   );
-  const list = document.createElement("ol");
-  list.className = "paused-sequence-list";
-  for (const streak of sequences.streaks) list.appendChild(renderPausedStreak(streak));
-  section.append(summaries, list);
+  section.append(summaries);
 
-  if (sequences.observations.length) {
-    const observations = document.createElement("ul");
-    observations.className = "paused-sequence-observations";
-    for (const observation of sequences.observations) {
-      const item = document.createElement("li");
-      item.dataset.observationCode = observation.code;
-      item.textContent = observation.text;
-      observations.appendChild(item);
-    }
-    section.appendChild(observations);
+  if (weeks && weeks.length > 0) {
+    section.appendChild(renderPausedTimeline(weeks, sequences));
   }
+
   return section;
 }
 
@@ -263,6 +345,61 @@ function renderPausedSummary(label, value) {
   text.textContent = value;
   summary.append(heading, text);
   return summary;
+}
+
+function renderPausedTimeline(weeks, sequences) {
+  const section = document.createElement("section");
+  section.className = "paused-timeline";
+
+  const container = document.createElement("div");
+  container.className = "paused-timeline-container";
+
+  // Week numbers row
+  const numberRow = document.createElement("div");
+  numberRow.className = "paused-timeline-numbers";
+
+  // Timeline markers row
+  const timelineRow = document.createElement("div");
+  timelineRow.className = "paused-timeline-markers";
+
+  // Build a set of paused week numbers for quick lookup
+  const pausedWeekNumbers = new Set();
+  for (const streak of sequences.streaks) {
+    for (const week of streak.weeks) {
+      pausedWeekNumbers.add(week.iso_week);
+    }
+  }
+
+  for (const week of weeks) {
+    const numberCell = document.createElement("div");
+    numberCell.className = "paused-timeline-number";
+    numberCell.textContent = week.iso_week;
+    numberRow.appendChild(numberCell);
+
+    const marker = document.createElement("div");
+    marker.className = "paused-timeline-marker";
+
+    if (pausedWeekNumbers.has(week.iso_week)) {
+      marker.classList.add("paused-timeline-paused");
+      marker.textContent = "—";
+      marker.setAttribute("title", `Paused · Week ${week.iso_week}`);
+    } else {
+      marker.classList.add("paused-timeline-active");
+      if (week.presence === "recorded") {
+        const presentation = conditionPresentation[week.condition];
+        marker.textContent = presentation.symbol;
+        marker.setAttribute("title", `${presentation.label} · Week ${week.iso_week}`);
+      } else {
+        marker.textContent = "·";
+        marker.setAttribute("title", `No record · Week ${week.iso_week}`);
+      }
+    }
+    timelineRow.appendChild(marker);
+  }
+
+  container.append(numberRow, timelineRow);
+  section.appendChild(container);
+  return section;
 }
 
 function renderPausedStreak(streak) {

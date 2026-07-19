@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#1D1E20">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" href="/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icon.svg">
     <title>-traect</title>
     <link rel="stylesheet" href="/tokens.css">
     <link rel="stylesheet" href="/typography.css">
@@ -23,16 +24,14 @@
 
       <nav aria-label="Sections" id="main-nav">
         <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
-        <button class="tab" type="button" data-view="timeline" aria-selected="false">Timeline</button>
+        <button class="tab" type="button" data-view="history" aria-selected="false">History</button>
+        <button class="tab" type="button" data-view="patterns" aria-selected="false">Patterns</button>
         <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
       </nav>
 
       <main>
         <section id="current-view">
-          <div class="current-week-meta">
-            <h2 class="meta week-heading" id="week-meta"></h2>
-            <p class="lifecycle-meta" id="current-lifecycle"></p>
-          </div>
+          <p class="current-week-meta" id="week-meta"></p>
 
           <section class="current-tradeoff hidden" id="current-tradeoff" aria-labelledby="current-tradeoff-title">
             <h3 class="section-title" id="current-tradeoff-title">This week</h3>
@@ -46,16 +45,24 @@
           </div>
         </section>
 
-        <section id="timeline-view" class="timeline hidden" aria-labelledby="timeline-title">
+        <section id="history-view" class="history hidden" aria-labelledby="history-title">
           <div>
-            <h2 class="view-title" id="timeline-title">Timeline</h2>
+            <h2 class="view-title" id="history-title">History</h2>
             <p class="hint">Saved weekly snapshots in reverse chronological order.</p>
           </div>
-          <section class="focus-history history-panel" aria-labelledby="history-title">
+          <h3 class="section-title">Weekly reviews</h3>
+          <div class="status" id="history-status" role="status"></div>
+          <div class="history-entries" id="history-entries"></div>
+        </section>
+
+        <section id="patterns-view" class="patterns hidden" aria-labelledby="patterns-title">
+          <div>
+            <h2 class="view-title" id="patterns-title">Patterns</h2>
+          </div>
+          <section class="focus-history history-panel" aria-labelledby="patterns-analytics-title">
             <div class="focus-history-heading">
               <div>
-                <h3 class="section-title" id="history-title">History</h3>
-                <p class="hint">Recorded Focus, Condition, and trade-offs across saved weekly reviews.</p>
+                <h3 class="section-title" id="patterns-analytics-title">Analytics</h3>
               </div>
               <label class="focus-history-range">Range
                 <select id="focus-history-range" aria-controls="focus-history-content condition-history-content tradeoff-history-content">
@@ -66,7 +73,7 @@
                 </select>
               </label>
             </div>
-            <div class="history-tabs" role="tablist" aria-label="History type">
+            <div class="history-tabs" role="tablist" aria-label="Pattern type">
               <button class="tab" id="history-focus-tab" type="button" role="tab"
                 aria-selected="true" aria-controls="focus-history-panel">Focus</button>
               <button class="tab" id="history-condition-tab" type="button" role="tab"
@@ -75,29 +82,17 @@
                 aria-selected="false" aria-controls="tradeoff-history-panel">Trade-offs</button>
             </div>
             <section id="focus-history-panel" role="tabpanel" aria-labelledby="history-focus-tab">
-              <div>
-                <h4 class="section-title" id="focus-history-title">Focus history</h4>
-                <p class="hint">Where Primary focus was recorded across saved weekly reviews.</p>
-              </div>
               <div class="status" id="focus-history-status" role="status"></div>
               <div class="focus-history-content" id="focus-history-content"></div>
             </section>
             <section id="tradeoff-history-panel" class="tradeoff-history hidden" role="tabpanel"
               aria-labelledby="history-tradeoffs-tab">
-              <div>
-                <h4 class="section-title">Trade-off patterns</h4>
-                <p class="hint">Primary focus and What gave way selections recorded in the same saved reviews.</p>
-              </div>
               <div class="status" id="tradeoff-history-status" role="status"></div>
               <div class="tradeoff-history-content" id="tradeoff-history-content"></div>
             </section>
             <section id="condition-history-panel" class="condition-history hidden" role="tabpanel"
               aria-labelledby="history-condition-tab">
               <div class="condition-history-heading">
-                <div>
-                  <h4 class="section-title">Condition history</h4>
-                  <p class="hint">How a Domain’s recorded Condition appears across saved reviews.</p>
-                </div>
                 <label class="condition-domain-select">Domain
                   <select id="condition-history-domain"></select>
                 </label>
@@ -106,9 +101,6 @@
               <div class="condition-history-content" id="condition-history-content"></div>
             </section>
           </section>
-          <h3 class="section-title">Weekly snapshots</h3>
-          <div class="status" id="timeline-status" role="status"></div>
-          <div class="timeline-entries" id="timeline-entries"></div>
         </section>
 
         <section id="edit-view" class="hidden">
@@ -167,6 +159,6 @@
     <script>
       window.TRAECT_API_BASE = "";
     </script>
-    <script src="/app.js?v=20260717-modules" type="module"></script>
+    <script src="/app.js" type="module"></script>
   </body>
 </html>

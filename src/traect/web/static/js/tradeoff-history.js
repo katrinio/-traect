@@ -37,19 +37,14 @@ export function renderTradeoffHistory(elements, history, callbacks) {
     elements.content.replaceChildren(renderEmptyHistory());
     return;
   }
-  const sections = [renderSummary(data.summary)];
-  if (data.integrity.excluded_pair_count > 0) {
-    sections.push(renderIntegrity(data.integrity.excluded_pair_count));
-  }
-  if (!data.pairs.length) sections.push(renderNoPairs(data.summary));
-  else {
+  const sections = [];
+  if (data.pairs.length > 0) {
+    sections.push(renderRecordedMetrics(data));
     sections.push(renderSacrificeRanking(data.sacrifices, data.summary.valid_pair_count));
     sections.push(renderPairRanking(data.pairs, data.summary.valid_pair_count));
-    sections.push(renderFocusBreakdowns(data.focus_breakdowns));
-    sections.push(renderSacrificeBreakdowns(data.sacrifice_breakdowns));
+  } else {
+    sections.push(renderNoPairs(data.summary));
   }
-  sections.push(renderChronology(data.weeks));
-  if (data.observations.length) sections.push(renderObservations(data.observations));
   elements.content.replaceChildren(...sections);
 }
 
@@ -65,37 +60,45 @@ function renderEmptyHistory() {
   return empty;
 }
 
-function renderSummary(summary) {
-  const list = document.createElement("dl");
-  list.className = "tradeoff-history-summary";
-  for (const [label, value] of [
-    ["Reviewed weeks", summary.reviewed_week_count],
-    ["With Primary focus", summary.focus_week_count],
-    ["With What gave way", summary.sacrifice_week_count],
-    ["Valid focus–trade-off pairs", summary.valid_pair_count],
-    ["Focus without trade-off", summary.focus_without_sacrifice_count],
-    ["Excluded records", summary.excluded_pair_count],
-  ]) appendMetric(list, label, value);
-  return list;
+function renderRecordedMetrics(data) {
+  const container = document.createElement("div");
+  container.className = "tradeoff-recorded-metrics";
+
+  const title = document.createElement("div");
+  title.className = "tradeoff-recorded-title";
+  title.textContent = "Recorded trade-offs";
+
+  const metrics = document.createElement("div");
+  metrics.className = "tradeoff-recorded-values";
+
+  // Calculate distinct domains appearing in valid pairs
+  const domainsSet = new Set();
+  for (const pair of data.pairs) {
+    domainsSet.add(pair.focus.name);
+    domainsSet.add(pair.sacrifice.name);
+  }
+  const uniqueDomains = domainsSet.size;
+
+  // Unique combinations = number of distinct directional pairs
+  const uniqueCombinations = data.pairs.length;
+
+  // Valid pairs = total valid weekly records with both sides
+  const validPairs = data.summary.valid_pair_count;
+
+  const pairsMetric = document.createElement("span");
+  pairsMetric.textContent = `${validPairs} pairs`;
+
+  const domainsMetric = document.createElement("span");
+  domainsMetric.textContent = `${uniqueDomains} domains`;
+
+  const combinationsMetric = document.createElement("span");
+  combinationsMetric.textContent = `${uniqueCombinations} unique combinations`;
+
+  metrics.append(pairsMetric, domainsMetric, combinationsMetric);
+  container.append(title, metrics);
+  return container;
 }
 
-function appendMetric(list, label, value) {
-  const row = document.createElement("div");
-  const term = document.createElement("dt");
-  const definition = document.createElement("dd");
-  term.textContent = label;
-  definition.textContent = String(value);
-  row.append(term, definition);
-  list.appendChild(row);
-}
-
-function renderIntegrity(count) {
-  const notice = document.createElement("p");
-  notice.className = "status tradeoff-history-integrity";
-  notice.setAttribute("role", "status");
-  notice.textContent = `${count} trade-off ${count === 1 ? "record was" : "records were"} excluded because historical data is inconsistent.`;
-  return notice;
-}
 
 function renderNoPairs(summary) {
   const notice = document.createElement("p");
@@ -108,31 +111,40 @@ function renderNoPairs(summary) {
 }
 
 function renderSacrificeRanking(sacrifices, denominator) {
-  const section = makeSection("What gave way most often", "Counts and shares use valid recorded trade-offs.");
-  const list = document.createElement("ol");
-  list.className = "tradeoff-sacrifice-ranking";
+  const section = makeSection("What gave way most often");
+  const container = document.createElement("div");
+  container.className = "tradeoff-ranking-chart";
   for (const domain of sacrifices) {
-    const item = document.createElement("li");
+    const row = document.createElement("div");
+    row.className = "tradeoff-chart-row";
+
+    const label = document.createElement("div");
+    label.className = "tradeoff-chart-label";
     const name = document.createElement("span");
     name.textContent = domain.name;
     appendDomainStatus(name, domain);
-    const metric = document.createElement("span");
-    metric.textContent = `${domain.count} of ${denominator} recorded trade-offs · ${formatPercentage(domain.share_of_pairs)}`;
-    const recent = document.createElement("span");
-    recent.className = "hint";
-    recent.textContent = `Most recent: ${formatWeekLabel(domain.most_recent)}`;
-    item.append(name, metric, recent);
-    list.appendChild(item);
+    label.appendChild(name);
+
+    const barContainer = document.createElement("div");
+    barContainer.className = "tradeoff-chart-bar-container";
+    const bar = document.createElement("div");
+    bar.className = "tradeoff-chart-bar";
+    bar.style.width = (domain.share_of_pairs * 100) + "%";
+    barContainer.appendChild(bar);
+
+    const percentage = document.createElement("span");
+    percentage.className = "tradeoff-chart-percentage";
+    percentage.textContent = formatPercentage(domain.share_of_pairs);
+
+    row.append(label, barContainer, percentage);
+    container.appendChild(row);
   }
-  section.appendChild(list);
+  section.appendChild(container);
   return section;
 }
 
 function renderPairRanking(pairs, denominator) {
-  const section = makeSection(
-    "Recurring combinations",
-    "The direction reads Primary focus → What gave way. It describes recorded co-occurrence only.",
-  );
+  const section = makeSection("Recurring trade-offs");
   const list = document.createElement("div");
   list.className = "tradeoff-pair-ranking";
   for (const pair of pairs) list.appendChild(renderPair(pair, denominator));
@@ -141,86 +153,36 @@ function renderPairRanking(pairs, denominator) {
 }
 
 function renderPair(pair, denominator) {
-  const details = document.createElement("details");
-  details.className = "tradeoff-pair";
-  const summary = document.createElement("summary");
-  const label = document.createElement("span");
-  label.className = "tradeoff-pair-label";
-  label.textContent = `${pair.focus.name} → ${pair.sacrifice.name}`;
-  const accessible = document.createElement("span");
-  accessible.className = "visually-hidden";
-  accessible.textContent = `Primary focus: ${pair.focus.name}. What gave way: ${pair.sacrifice.name}.`;
-  appendDomainStatus(label, pair.focus);
-  appendDomainStatus(label, pair.sacrifice);
+  const item = document.createElement("div");
+  item.className = "tradeoff-pair";
+
+  const source = document.createElement("div");
+  source.className = "tradeoff-pair-source";
+  const sourceName = document.createElement("span");
+  sourceName.textContent = pair.focus.name;
+  appendDomainStatus(sourceName, pair.focus);
+  source.appendChild(sourceName);
+
+  const flow = document.createElement("div");
+  flow.className = "tradeoff-pair-flow";
+  const connector = document.createElement("div");
+  connector.className = "tradeoff-pair-connector";
+  connector.setAttribute("aria-hidden", "true");
+
+  const destName = document.createElement("span");
+  destName.className = "tradeoff-pair-dest-name";
+  destName.textContent = pair.sacrifice.name;
+  appendDomainStatus(destName, pair.sacrifice);
+
   const metric = document.createElement("span");
-  metric.textContent = `${pair.count} of ${denominator} recorded trade-offs · ${formatPercentage(pair.share_of_pairs)}`;
-  const bar = document.createElement("span");
-  bar.className = "tradeoff-pair-bar";
-  bar.setAttribute("role", "img");
-  bar.setAttribute("aria-label", `${pair.count} of ${denominator} recorded trade-offs`);
-  const fill = document.createElement("span");
-  fill.style.width = formatPercentage(pair.share_of_pairs);
-  bar.appendChild(fill);
-  summary.append(label, accessible, metric, bar);
+  metric.className = "tradeoff-pair-metric";
+  metric.textContent = formatPercentage(pair.share_of_pairs);
 
-  const detail = document.createElement("div");
-  detail.className = "tradeoff-pair-detail";
-  const recent = document.createElement("p");
-  recent.textContent = `Most recent record: ${formatWeekLabel(pair.most_recent)}.`;
-  const weeks = document.createElement("ul");
-  for (const week of pair.weeks) weeks.appendChild(renderWeekLink(week, "Open trade-off review"));
-  detail.append(recent, weeks);
-  details.append(summary, detail);
-  return details;
+  flow.append(connector, destName, metric);
+  item.append(source, flow);
+  return item;
 }
 
-function renderFocusBreakdowns(breakdowns) {
-  const section = makeSection(
-    "By Primary focus",
-    "Shares use all valid weeks with the selected Domain as Primary focus, including no trade-off.",
-  );
-  for (const breakdown of breakdowns) {
-    const details = document.createElement("details");
-    details.className = "tradeoff-breakdown";
-    const summary = document.createElement("summary");
-    summary.textContent = `When ${breakdown.focus.name} was Primary focus · ${breakdown.focus_week_count} weeks`;
-    appendDomainStatus(summary, breakdown.focus);
-    const list = document.createElement("ul");
-    for (const item of breakdown.sacrifices) {
-      const row = document.createElement("li");
-      row.textContent = `${item.sacrifice.name} was recorded as What gave way · ${item.count} of ${breakdown.focus_week_count} weeks · ${formatPercentage(item.share_of_focus_weeks)}`;
-      list.appendChild(row);
-    }
-    if (breakdown.no_tradeoff_count > 0) {
-      const row = document.createElement("li");
-      row.textContent = `No trade-off · ${breakdown.no_tradeoff_count} of ${breakdown.focus_week_count} weeks`;
-      list.appendChild(row);
-    }
-    details.append(summary, list);
-    section.appendChild(details);
-  }
-  return section;
-}
-
-function renderSacrificeBreakdowns(breakdowns) {
-  const section = makeSection("By What gave way", "Primary-focus Domains recorded in the same weekly reviews.");
-  for (const breakdown of breakdowns) {
-    const details = document.createElement("details");
-    details.className = "tradeoff-breakdown";
-    const summary = document.createElement("summary");
-    summary.textContent = `When ${breakdown.sacrifice.name} was What gave way · ${breakdown.sacrifice_week_count} weeks`;
-    appendDomainStatus(summary, breakdown.sacrifice);
-    const list = document.createElement("ul");
-    for (const item of breakdown.focuses) {
-      const row = document.createElement("li");
-      row.textContent = `${item.focus.name} was Primary focus · ${item.count} weeks · ${formatPercentage(item.share_of_sacrifice_weeks)}`;
-      list.appendChild(row);
-    }
-    details.append(summary, list);
-    section.appendChild(details);
-  }
-  return section;
-}
 
 function renderChronology(weeks) {
   const section = makeSection("Reviewed weeks", "Saved weekly trade-off records in reverse chronological order.");

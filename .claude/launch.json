@@ -5,7 +5,8 @@
       "name": "traect-web",
       "runtimeExecutable": "poetry",
       "runtimeArgs": ["run", "traect"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": true
     }
   ]
 }
