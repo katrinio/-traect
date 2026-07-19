@@ -245,65 +245,70 @@ section {
   overflow-wrap: anywhere;
 }
 
+/* Compact horizontal summary */
 .focus-history-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
+  display: flex;
+  justify-content: space-around;
+  gap: var(--space-6);
   margin: 0;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.focus-history-summary > div {
+.focus-summary-cell {
+  text-align: center;
+  flex: 1;
+}
+
+.focus-summary-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: var(--space-2);
+}
+
+.focus-summary-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* Distribution section */
+.focus-domain-history {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.focus-history-summary dt,
-.focus-domain-recent,
-.focus-domain-status {
+.focus-domain-history:last-of-type {
+  border-bottom: none;
+}
+
+.focus-domain-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.focus-domain-name {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.focus-domain-status,
+.focus-domain-recent {
   color: var(--text-muted);
   font-size: 0.82rem;
 }
 
-.focus-history-summary dd {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.focus-domain-history {
-  border-bottom: 1px solid var(--border);
-}
-
-.focus-domain-history summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(6rem, 12rem);
-  gap: var(--space-2) var(--space-4);
-  padding: var(--space-2) 0;
-  cursor: pointer;
-  list-style-position: inside;
-}
-
-.focus-domain-header {
-  display: grid;
-  min-width: 0;
-}
-
-.focus-domain-name,
-.focus-domain-metric,
-.focus-domain-recent {
-  overflow-wrap: anywhere;
-}
-
-.focus-domain-metric {
-  font-size: 0.88rem;
-}
-
 .focus-domain-bar {
-  align-self: center;
   height: 0.45rem;
   overflow: hidden;
   border-radius: 999px;
   background: var(--border);
+  width: 100%;
 }
 
 .focus-domain-bar-fill {
@@ -312,26 +317,66 @@ section {
   background: var(--text-muted);
 }
 
+.focus-domain-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.9rem;
+}
+
+.focus-domain-metric {
+  color: var(--text-muted);
+}
+
 .focus-domain-recent {
-  grid-column: 1 / -1;
+  margin-left: auto;
 }
 
-.focus-domain-weeks {
+/* Collapsible weeks in distribution */
+.focus-domain-weeks-detail {
+  margin-top: var(--space-2);
+}
+
+.focus-domain-weeks-detail summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  list-style-position: inside;
+  padding: var(--space-2) 0;
+}
+
+.focus-domain-weeks-list {
   display: grid;
-  gap: var(--space-2);
-  padding: var(--space-2) 0 var(--space-3);
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
 }
 
-.focus-domain-weeks p {
-  margin: 0;
+/* Accordion for reviewed weeks */
+.focus-history-accordion {
+  border: none;
 }
 
-.focus-domain-weeks ul,
-.focus-history-sequence ol,
+.focus-history-accordion-summary {
+  cursor: pointer;
+  padding: var(--space-3) 0;
+  font-weight: 500;
+  list-style-position: inside;
+}
+
+.focus-history-accordion-count {
+  color: var(--text-muted);
+  font-weight: normal;
+  font-size: 0.95rem;
+  margin-left: var(--space-1);
+}
+
+.focus-history-weeks-list,
 .focus-history-zero ul {
   display: grid;
   gap: var(--space-1);
-  margin: 0;
+  margin: var(--space-3) 0;
   padding-left: var(--space-5);
 }
 

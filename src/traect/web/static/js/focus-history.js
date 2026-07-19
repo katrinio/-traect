@@ -61,22 +61,32 @@ function renderEmptyHistory() {
 }
 
 function renderSummary(summary) {
-  const list = document.createElement("dl");
-  list.className = "focus-history-summary";
-  for (const [label, value] of [
-    ["Reviewed weeks", summary.reviewed_week_count],
-    ["With Primary focus", summary.focused_week_count],
-    ["Without Primary focus", summary.no_focus_week_count],
-  ]) {
-    const item = document.createElement("div");
-    const term = document.createElement("dt");
-    const definition = document.createElement("dd");
-    term.textContent = label;
-    definition.textContent = String(value);
-    item.append(term, definition);
-    list.appendChild(item);
+  const container = document.createElement("div");
+  container.className = "focus-history-summary";
+
+  const items = [
+    { label: "reviewed", value: summary.reviewed_week_count },
+    { label: "focused", value: summary.focused_week_count },
+    { label: "empty", value: summary.no_focus_week_count },
+  ];
+
+  for (const item of items) {
+    const cell = document.createElement("div");
+    cell.className = "focus-summary-cell";
+
+    const value = document.createElement("div");
+    value.className = "focus-summary-value";
+    value.textContent = String(item.value);
+
+    const label = document.createElement("div");
+    label.className = "focus-summary-label";
+    label.textContent = item.label;
+
+    cell.append(value, label);
+    container.appendChild(cell);
   }
-  return list;
+
+  return container;
 }
 
 function renderIntegrityNotice(excludedCount) {
@@ -93,41 +103,38 @@ function renderDistribution(domains, reviewedWeekCount) {
   const heading = document.createElement("h4");
   heading.className = "section-title";
   heading.textContent = "Distribution";
-  const explanation = document.createElement("p");
-  explanation.className = "hint";
-  explanation.textContent = "Percentages use all reviewed weeks in this range, including weeks without Primary focus.";
   const rows = document.createElement("div");
   rows.className = "focus-history-bars";
   rows.replaceChildren(...domains.map((domain) => renderDomainHistory(domain, reviewedWeekCount)));
-  section.append(heading, explanation, rows);
+  section.append(heading, rows);
   return section;
 }
 
 function renderDomainHistory(domain, reviewedWeekCount) {
-  const details = document.createElement("details");
-  details.className = "focus-domain-history";
-  const summary = document.createElement("summary");
-  const header = document.createElement("span");
-  header.className = "focus-domain-header";
+  const container = document.createElement("div");
+  container.className = "focus-domain-history";
+
+  // Domain name with status flags
+  const nameRow = document.createElement("div");
+  nameRow.className = "focus-domain-name-row";
   const name = document.createElement("span");
   name.className = "focus-domain-name";
   name.textContent = domain.name;
-  const flags = [];
-  if (domain.archived) flags.push("Archived");
-  if (domain.unavailable) flags.push("Unavailable");
-  if (flags.length) {
+  if (domain.archived || domain.unavailable) {
+    const flags = [];
+    if (domain.archived) flags.push("Archived");
+    if (domain.unavailable) flags.push("Unavailable");
     const status = document.createElement("span");
     status.className = "focus-domain-status";
-    status.textContent = flags.join(" · ");
-    name.append(" ", status);
+    status.textContent = ` · ${flags.join(" · ")}`;
+    nameRow.append(name, status);
+  } else {
+    nameRow.append(name);
   }
-  const percentage = formatPercentage(domain.focus_share);
-  const metric = document.createElement("span");
-  metric.className = "focus-domain-metric";
-  metric.textContent = `${domain.focus_count} of ${reviewedWeekCount} reviewed weeks · ${percentage}`;
-  header.append(name, metric);
 
-  const chart = document.createElement("span");
+  // Progress bar
+  const percentage = formatPercentage(domain.focus_share);
+  const chart = document.createElement("div");
   chart.className = "focus-domain-bar";
   chart.setAttribute("role", "img");
   chart.setAttribute("aria-label", `${domain.name}: ${domain.focus_count} of ${reviewedWeekCount} reviewed weeks, ${percentage}`);
@@ -136,20 +143,29 @@ function renderDomainHistory(domain, reviewedWeekCount) {
   fill.style.width = percentage;
   chart.appendChild(fill);
 
+  // Metrics and most recent week
+  const metricRow = document.createElement("div");
+  metricRow.className = "focus-domain-metric-row";
+  const metric = document.createElement("span");
+  metric.className = "focus-domain-metric";
+  metric.textContent = `${domain.focus_count} / ${reviewedWeekCount} · ${percentage}`;
   const recent = document.createElement("span");
   recent.className = "focus-domain-recent";
-  recent.textContent = `Most recent: ${formatWeekLabel(domain.most_recent_focus)}`;
-  summary.append(header, chart, recent);
+  recent.textContent = formatWeekLabel(domain.most_recent_focus);
+  metricRow.append(metric, recent);
 
-  const detail = document.createElement("div");
-  detail.className = "focus-domain-weeks";
-  const detailText = document.createElement("p");
-  detailText.textContent = `${domain.name} was Primary focus in ${domain.focus_count} of ${reviewedWeekCount} reviewed weeks.`;
+  // Collapsible weeks list
+  const details = document.createElement("details");
+  details.className = "focus-domain-weeks-detail";
+  const summary = document.createElement("summary");
+  summary.textContent = `View all ${domain.focus_count} weeks`;
   const list = document.createElement("ul");
-  list.replaceChildren(...domain.weeks.map((week) => renderWeekLinkItem(week)));
-  detail.append(detailText, list);
-  details.append(summary, detail);
-  return details;
+  list.className = "focus-domain-weeks-list";
+  list.replaceChildren(...domain.weeks.map((week) => renderWeekPlainItem(week)));
+  details.append(summary, list);
+
+  container.append(nameRow, chart, metricRow, details);
+  return container;
 }
 
 function renderNoFocusedWeeks() {
@@ -178,12 +194,25 @@ function renderZeroFocusDomains(domains) {
 function renderSequence(weeks) {
   const section = document.createElement("section");
   section.className = "focus-history-sequence";
-  const heading = document.createElement("h4");
-  heading.className = "section-title";
-  heading.textContent = "Reviewed weeks";
+
+  const details = document.createElement("details");
+  details.className = "focus-history-accordion";
+
+  const summary = document.createElement("summary");
+  summary.className = "focus-history-accordion-summary";
+  const title = document.createElement("span");
+  title.textContent = "Reviewed weeks";
+  const count = document.createElement("span");
+  count.className = "focus-history-accordion-count";
+  count.textContent = `(${weeks.length})`;
+  summary.append(title, " ", count);
+
   const list = document.createElement("ol");
-  list.replaceChildren(...weeks.map((week) => renderWeekLinkItem(week, true)));
-  section.append(heading, list);
+  list.className = "focus-history-weeks-list";
+  list.replaceChildren(...weeks.map((week) => renderWeekPlainItem(week, true)));
+
+  details.append(summary, list);
+  section.appendChild(details);
   return section;
 }
 
@@ -195,5 +224,13 @@ function renderWeekLinkItem(week, includeFocus = false) {
     text: `${formatWeekLabel(week)}${focus}${lifecycle}`,
     ariaLabel: `Open saved review for ${formatWeekLabel(week)}`,
   }));
+  return item;
+}
+
+function renderWeekPlainItem(week, includeFocus = false) {
+  const item = document.createElement("li");
+  const lifecycle = week.lifecycle === "provisional" ? " · Provisional" : "";
+  const focus = includeFocus ? ` · ${week.focus?.name || "No Primary focus"}` : "";
+  item.textContent = `${formatWeekLabel(week)}${focus}${lifecycle}`;
   return item;
 }
