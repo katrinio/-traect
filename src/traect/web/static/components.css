@@ -493,3 +493,146 @@ button:focus {
   border-color: var(--border);
   color: var(--text-muted);
 }
+
+/* Recorded metrics - lightweight, minimal */
+.tradeoff-recorded-metrics {
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.tradeoff-recorded-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: var(--space-3);
+}
+
+.tradeoff-recorded-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.tradeoff-recorded-values span {
+  display: flex;
+  align-items: center;
+}
+
+.tradeoff-recorded-values span::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  margin-right: var(--space-2);
+}
+
+.tradeoff-recorded-values span:first-child::before {
+  display: none;
+}
+
+/* Rankings section - no card, direct typography */
+.tradeoff-ranking-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.tradeoff-chart-row {
+  display: grid;
+  grid-template-columns: 6rem 1fr 3rem;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.tradeoff-chart-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.tradeoff-chart-bar-container {
+  height: 0.75rem;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tradeoff-chart-bar {
+  height: 100%;
+  background: var(--text-muted);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.tradeoff-chart-percentage {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* Recurring trade-offs - visual centerpiece */
+.tradeoff-pair-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.tradeoff-pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tradeoff-pair-source {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.tradeoff-pair-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-left: 3.8rem;
+  position: relative;
+}
+
+.tradeoff-pair-flow::before {
+  content: "└────▶";
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  width: 3.2rem;
+}
+
+.tradeoff-pair-connector {
+  display: none;
+}
+
+.tradeoff-pair-dest-name {
+  color: var(--text);
+  font-weight: 500;
+  flex-grow: 1;
+  font-size: 0.95rem;
+}
+
+.tradeoff-pair-metric {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
