@@ -569,7 +569,7 @@ section {
   margin: 0;
 }
 
-.condition-summary > div {
+.condition-summary > div:not(.condition-summary-row) {
   display: grid;
   grid-template-columns: minmax(8rem, 1fr) auto;
   gap: var(--space-3);
