@@ -211,7 +211,13 @@ def audit_weekly_data(
     audited_at = (clock or (lambda: datetime.now(UTC)))()
     if audited_at.tzinfo is None:
         audited_at = audited_at.replace(tzinfo=UTC)
-    logger.info("weekly data audit started")
+    logger.info(
+        "Weekly data audit started: workspace_id=%s iso_year=%s iso_week=%s fix_safe=%s",
+        audit_scope.workspace_id,
+        audit_scope.iso_year,
+        audit_scope.iso_week,
+        fix_safe,
+    )
 
     with engine.connect() as connection:
         report, scan = _audit_in_connection(connection, audit_scope, audited_at)
@@ -221,7 +227,7 @@ def audit_weekly_data(
         report.repairs.extend(_proposed_results(scan.actions))
 
     logger.info(
-        "weekly data audit completed: weeks=%s states=%s proposed=%s applied=%s unresolved=%s",
+        "Weekly data audit completed: weeks=%s states=%s proposed=%s applied=%s unresolved=%s",
         report.total_weeks_inspected,
         report.total_states_inspected,
         len(scan.actions),
@@ -942,9 +948,9 @@ def _apply_repairs(
                 if any(remaining.values()):
                     raise RuntimeError("safe repair did not satisfy its post-repair validation")
             results.extend(_applied_result(action) for action in week_actions)
-            logger.info("weekly data repairs committed for week_id=%s count=%s", week_id, len(week_actions))
+            logger.info("Weekly data repairs committed: week_id=%s count=%s", week_id, len(week_actions))
         except Exception as exc:
-            logger.exception("weekly data repairs rolled back for week_id=%s", week_id)
+            logger.exception("Weekly data repairs rolled back: week_id=%s", week_id)
             results.extend(_rolled_back_result(action, str(exc)) for action in week_actions)
     return results
 

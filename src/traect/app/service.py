@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
@@ -12,6 +13,7 @@ from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycl
 from traect.domain.models import Domain, Week, WeekDomainState, Workspace
 
 MINIMUM_ACCEPTABLE_LEVEL_LIMIT = 500
+logger = logging.getLogger(__name__)
 
 
 class _Unset:
@@ -52,6 +54,7 @@ class TraectService:
         workspace = Workspace(name=name)
         self.session.add(workspace)
         self.session.flush()
+        logger.info("Workspace created: workspace_id=%s name=%s", workspace.id, workspace.name)
         return workspace
 
     def create_workspace_with_domains(
@@ -81,6 +84,12 @@ class TraectService:
             domain.workspace_id = workspace.id
             self.session.add(domain)
         self.session.flush()
+        logger.info(
+            "Workspace created with domains: workspace_id=%s name=%s domain_count=%s",
+            workspace.id,
+            workspace.name,
+            len(cleaned_names),
+        )
         return workspace
 
     def get_workspace(self, workspace_id: int) -> Workspace:
@@ -118,6 +127,13 @@ class TraectService:
         domain.archived_at = None
         self.session.add(domain)
         self.session.flush()
+        logger.info(
+            "Domain created: workspace_id=%s domain_id=%s name=%s sort_order=%s",
+            workspace.id,
+            domain.id,
+            domain.name,
+            domain.sort_order,
+        )
         return domain
 
     def list_domains(self, workspace_id: int, include_archived: bool = True) -> list[Domain]:
@@ -148,6 +164,7 @@ class TraectService:
         if not isinstance(minimum_acceptable_level, _Unset):
             domain.minimum_acceptable_level = self._normalize_minimum_acceptable_level(minimum_acceptable_level)
         self.session.flush()
+        logger.info("Domain updated: domain_id=%s workspace_id=%s", domain.id, domain.workspace_id)
         return domain
 
     def reorder_domains(self, workspace_id: int, domain_ids: list[int]) -> list[Domain]:
@@ -165,12 +182,14 @@ class TraectService:
             domain.sort_order = index
             ordered.append(domain)
         self.session.flush()
+        logger.info("Domains reordered: workspace_id=%s domain_count=%s", workspace.id, len(ordered))
         return ordered
 
     def archive_domain(self, domain_id: int) -> Domain:
         domain = self.get_domain(domain_id)
         domain.archived_at = datetime.now(UTC)
         self.session.flush()
+        logger.info("Domain archived: domain_id=%s workspace_id=%s", domain.id, domain.workspace_id)
         return domain
 
     def restore_domain(self, domain_id: int) -> Domain:
@@ -179,6 +198,7 @@ class TraectService:
         domain.archived_at = None
         domain.sort_order = self._next_domain_sort_order(domain.workspace_id)
         self.session.flush()
+        logger.info("Domain restored: domain_id=%s workspace_id=%s", domain.id, domain.workspace_id)
         return domain
 
     def upsert_week(
@@ -195,9 +215,16 @@ class TraectService:
         workspace = self.get_workspace(workspace_id)
         lifecycle = self.lifecycle_for_week(iso_year, iso_week)
         if lifecycle == ReviewLifecycle.FINAL:
+            logger.warning(
+                "Weekly review edit rejected: workspace_id=%s iso_year=%s iso_week=%s reason=final",
+                workspace_id,
+                iso_year,
+                iso_week,
+            )
             raise ConflictError("This weekly review is final and can no longer be edited.")
         starts_on, ends_on = _week_bounds(iso_year, iso_week)
         week = self._get_or_create_week(workspace.id, iso_year, iso_week, starts_on, ends_on)
+        created = len(week.domain_states) == 0 and week.notes is None and week.sacrificed_domain_id is None
 
         if sacrificed_domain_id is not None:
             self._validate_domain_in_workspace(sacrificed_domain_id, workspace.id)
@@ -276,6 +303,17 @@ class TraectService:
                 current.comment = state_input.comment
 
         self.session.flush()
+        logger.info(
+            "Weekly review saved: "
+            "workspace_id=%s week_id=%s iso_year=%s iso_week=%s states=%s created=%s sacrificed_domain_id=%s",
+            workspace.id,
+            week.id,
+            iso_year,
+            iso_week,
+            len(states),
+            created,
+            sacrificed_domain_id,
+        )
         return week
 
     def validate_week_values(

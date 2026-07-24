@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections.abc import Callable, Mapping
 from datetime import date, datetime
@@ -20,8 +21,10 @@ from traect.app.database import make_engine, make_session_factory, migrate_schem
 from traect.app.errors import ConflictError, NotFoundError, TraectError, ValidationError
 from traect.app.service import TraectService
 from traect.domain.models import Workspace
+from traect.logging_utils import configure_logging
 
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
+logger = logging.getLogger(__name__)
 
 
 def build_app(
@@ -34,10 +37,12 @@ def build_app(
     migrate_schema(engine)
     session_factory = make_session_factory(engine)
     timezone = ZoneInfo(timezone_name or os.environ.get("TRAECT_TIMEZONE", "UTC"))
+    logger.info("Application initialized: database_url=%s timezone=%s", database_url, timezone.key)
 
     def app(environ: Mapping[str, Any], start_response: Callable[..., Any]) -> list[bytes]:
         method = environ["REQUEST_METHOD"]
         path = environ.get("PATH_INFO", "/")
+        logger.info("Request started: method=%s path=%s", method, path)
         if method == "GET" and path == "/health":
             return _health_response(start_response, engine)
         if method == "GET" and path in {"/", "/index.html"}:
@@ -54,27 +59,38 @@ def build_app(
                 query = parse_qs(str(environ.get("QUERY_STRING", "")), keep_blank_values=True)
                 result = dispatch(service, method, path, payload, query)
                 session.commit()
+                logger.info("Request completed: method=%s path=%s status=200", method, path)
                 return _json_response(start_response, "200 OK", result)
             except ValidationError as exc:
                 session.rollback()
+                logger.warning("Request rejected: method=%s path=%s status=400 error=%s", method, path, exc)
                 return _json_response(start_response, "400 Bad Request", {"error": str(exc)})
             except ConflictError as exc:
                 session.rollback()
+                logger.warning("Request rejected: method=%s path=%s status=409 error=%s", method, path, exc)
                 return _json_response(start_response, "409 Conflict", {"error": str(exc)})
             except NotFoundError as exc:
                 session.rollback()
+                logger.warning("Request rejected: method=%s path=%s status=404 error=%s", method, path, exc)
                 return _json_response(start_response, "404 Not Found", {"error": str(exc)})
             except TraectError as exc:
                 session.rollback()
+                logger.warning("Request rejected: method=%s path=%s status=422 error=%s", method, path, exc)
                 return _json_response(start_response, "422 Unprocessable Entity", {"error": str(exc)})
             except KeyError as exc:
                 session.rollback()
                 message = f"missing required field: {exc.args[0]}"
+                logger.warning("Request rejected: method=%s path=%s status=400 error=%s", method, path, message)
                 return _json_response(start_response, "400 Bad Request", {"error": message})
             except (TypeError, ValueError) as exc:
                 session.rollback()
                 message = f"invalid request: {exc}" if str(exc) else "invalid request"
+                logger.warning("Request rejected: method=%s path=%s status=400 error=%s", method, path, message)
                 return _json_response(start_response, "400 Bad Request", {"error": message})
+            except Exception:
+                session.rollback()
+                logger.exception("Request failed: method=%s path=%s status=500", method, path)
+                return _json_response(start_response, "500 Internal Server Error", {"error": "internal server error"})
 
     return app
 
@@ -94,7 +110,9 @@ def _health_response(start_response: Callable[..., Any], engine: Engine) -> list
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
     except SQLAlchemyError:
+        logger.error("Health check failed: database unavailable")
         return _json_response(start_response, "503 Service Unavailable", {"status": "unavailable"})
+    logger.info("Health check passed")
     return _json_response(start_response, "200 OK", {"status": "ok"})
 
 
@@ -176,11 +194,12 @@ def _load_payload(body: bytes) -> dict[str, Any]:
 
 
 def main() -> None:
+    configure_logging()
     database_url = os.environ.get("TRAECT_DATABASE_URL", "sqlite:///traect.db")
     app = build_app(database_url)
     host, port = server_address_from_environment()
+    logger.info("Starting HTTP server: host=%s port=%s", host, port)
     with make_server(host, port, app) as server:
-        print(f"Serving on http://{host}:{port}")
         server.serve_forever()
 
 

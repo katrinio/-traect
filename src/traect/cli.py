@@ -10,6 +10,7 @@ from typing import Any
 from traect.api.app import main as serve
 from traect.app.database import make_engine
 from traect.app.weekly_audit import AuditScope, WeeklyAuditReport, audit_weekly_data
+from traect.logging_utils import configure_logging
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,8 +46,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _run_weekly_audit(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if (args.iso_year is None) != (args.iso_week is None):
         parser.error("--iso-year and --iso-week must be provided together")
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    configure_logging(logging.INFO)
     database_url = os.environ.get("TRAECT_DATABASE_URL", "sqlite:///traect.db")
+    logging.info(
+        "Starting weekly data audit: workspace_id=%s iso_year=%s iso_week=%s fix_safe=%s format=%s",
+        args.workspace_id,
+        args.iso_year,
+        args.iso_week,
+        args.fix_safe,
+        args.output_format,
+    )
     engine = make_engine(database_url)
     try:
         report = audit_weekly_data(
@@ -64,6 +73,16 @@ def _run_weekly_audit(args: argparse.Namespace, parser: argparse.ArgumentParser)
         print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     else:
         print(format_weekly_audit_report(report))
+    logging.info(
+        "Weekly data audit finished: weeks=%s states=%s issues=%s proposed=%s applied=%s rolled_back=%s unresolved=%s",
+        report.total_weeks_inspected,
+        report.total_states_inspected,
+        len(report.issues),
+        report.repairs_proposed,
+        report.repairs_applied,
+        report.repairs_rolled_back,
+        report.unresolved_manual_review,
+    )
     if report.repairs_rolled_back:
         return 2
     return 1 if report.unresolved_manual_review else 0

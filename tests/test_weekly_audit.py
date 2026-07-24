@@ -17,8 +17,14 @@ from traect.app.weekly_audit import (
     audit_weekly_data,
 )
 from traect.cli import main
+from traect.logging_utils import LOG_DATE_FORMAT, LOG_FORMAT
 
 AUDIT_CLOCK = lambda: datetime(2026, 7, 15, 12, tzinfo=UTC)
+
+
+def test_logging_format_matches_human_readable_requirement() -> None:
+    assert LOG_FORMAT == "%(asctime)s %(levelname)-5s %(message)s"
+    assert LOG_DATE_FORMAT == "%Y-%m-%d %H:%M:%S"
 
 
 @pytest.fixture

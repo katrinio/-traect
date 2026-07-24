@@ -192,6 +192,31 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
     assert len(week2.domain_states) == 2
 
 
+def test_service_logs_basic_state_changes(session: Session, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO")
+    service = TraectService(session, clock=lambda: datetime(2026, 7, 23, 12, tzinfo=UTC))
+
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+    service.upsert_week(
+        workspace.id,
+        2026,
+        30,
+        sacrificed_domain_id=health.id,
+        sacrifice_reason="Release",
+        states=[
+            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED),
+        ],
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Workspace created:" in message for message in messages)
+    assert any("Domain created:" in message for message in messages)
+    assert any("Weekly review saved:" in message for message in messages)
+
+
 def test_week_derives_a_single_main_focus_from_domain_attention(session: Session) -> None:
     service = TraectService(session)
     workspace = service.create_workspace("Life")
