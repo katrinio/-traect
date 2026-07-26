@@ -175,11 +175,18 @@ button:focus {
 .condition-mark {
   display: inline-flex;
   align-items: baseline;
+  gap: var(--space-2);
   font-weight: 600;
 }
 
 .condition-symbol {
   color: var(--text-muted);
+}
+
+.condition-label {
+  font-weight: 500;
+  color: var(--text);
+  font-size: 0.9rem;
 }
 
 .condition-mark[data-condition="stable"] .condition-symbol {

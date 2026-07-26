@@ -21,7 +21,6 @@ __all__ = [
     "WeeklyAuditReport",
     "WeeklyIssueCode",
     "audit_weekly_data",
-    "audit_weekly_data_in_connection",
 ]
 
 logger = logging.getLogger(__name__)
@@ -234,18 +233,6 @@ def audit_weekly_data(
         report.repairs_applied,
         report.unresolved_manual_review,
     )
-    return report
-
-
-def audit_weekly_data_in_connection(
-    connection: Connection,
-    *,
-    scope: AuditScope,
-    audited_at: datetime,
-) -> WeeklyAuditReport:
-    """Run the read-only audit inside an existing transaction."""
-    report, scan = _audit_in_connection(connection, scope, audited_at)
-    report.repairs.extend(_proposed_results(scan.actions))
     return report
 
 
