@@ -567,7 +567,7 @@ def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) ->
 
     assert response["status"].startswith("200")
     assert "Current" in response["body"]
-    assert "Timeline" in response["body"]
+    assert "History" in response["body"]
     assert "Domains" in response["body"]
     assert "Workspace Setup / Domains" not in response["body"]
     assert "Workspace setup" not in response["body"]
@@ -614,7 +614,7 @@ def test_migrations_adopt_a_legacy_create_all_database(tmp_path: Path) -> None:
     try:
         with verification_engine.connect() as connection:
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0008_minimum_acceptable_level"
+                "0009_starting_condition_snapshot"
             )
     finally:
         verification_engine.dispose()
@@ -636,8 +636,8 @@ def test_squashed_migration_creates_the_current_schema(tmp_path: Path) -> None:
     assert {"workspace", "domain", "week", "week_domain_state"} <= tables
     assert "minimum_acceptable_level" in domain_columns
     assert "focus_domain_id" not in week_columns
-    assert {"attention", "condition", "minimum_acceptable_level_snapshot"} <= state_columns
-    assert revision == "0008_minimum_acceptable_level"
+    assert {"attention", "condition", "starting_condition", "minimum_acceptable_level_snapshot"} <= state_columns
+    assert revision == "0009_starting_condition_snapshot"
 
 
 def test_squashed_migration_rejects_a_database_on_the_previous_chain(tmp_path: Path) -> None:
@@ -988,12 +988,12 @@ def test_canonical_week_state_values_round_trip(tmp_path: Path, attention: str, 
         b"{"
         + b'"states":[{"domain_id":1,"attention":"'
         + attention.encode()
-        + b'","condition":"'
+        + b'","starting_condition":"'
         + condition.encode()
         + b'"}]}'
     )
 
-    response = _request(app, "PUT", "/workspaces/1/weeks/2026/29", body=body)
+    response = _request(app, "PUT", "/workspaces/1/weeks/2026/30", body=body)
     payload = json.loads(response["body"])
     state = payload["states"][0]
 
@@ -1002,7 +1002,8 @@ def test_canonical_week_state_values_round_trip(tmp_path: Path, attention: str, 
         "domain_id": 1,
         "domain_name": "Work",
         "attention": attention,
-        "condition": condition,
+        "starting_condition": condition,
+        "condition": None,
         "minimum_acceptable_level": None,
         "comment": None,
     }
@@ -1020,12 +1021,12 @@ def test_legacy_week_state_fields_are_not_accepted(tmp_path: Path) -> None:
     response = _request(
         app,
         "PUT",
-        "/workspaces/1/weeks/2026/29",
+        "/workspaces/1/weeks/2026/30",
         body=b'{"states":[{"domain_id":1,"mode":"maintain","status":"good"}]}',
     )
 
     assert response["status"].startswith("400")
-    assert "missing required field: condition" in response["body"]
+    assert "missing required field: attention" in response["body"]
 
 
 def test_duplicate_focus_request_field_is_not_accepted(tmp_path: Path) -> None:
@@ -1035,8 +1036,10 @@ def test_duplicate_focus_request_field_is_not_accepted(tmp_path: Path) -> None:
     response = _request(
         app,
         "PUT",
-        "/workspaces/1/weeks/2026/29",
-        body=(b'{"focus_domain_id":1,"states":[{"domain_id":1,"attention":"primary_focus","condition":"stable"}]}'),
+        "/workspaces/1/weeks/2026/30",
+        body=(
+            b'{"focus_domain_id":1,"states":[{"domain_id":1,"attention":"primary_focus","starting_condition":"stable"}]}'
+        ),
     )
 
     assert response["status"].startswith("400")
@@ -1076,8 +1079,8 @@ def test_history_api_preserves_saved_domain_names_and_membership(tmp_path: Path)
         "/workspaces/1/weeks/2026/28",
         body=(
             b'{"sacrificed_domain_id":2,"sacrifice_reason":"Release",'
-            b'"states":[{"domain_id":1,"attention":"primary_focus","condition":"stable"},'
-            b'{"domain_id":2,"attention":"paused","condition":"at_risk"}]}'
+            b'"states":[{"domain_id":1,"attention":"primary_focus","starting_condition":"stable"},'
+            b'{"domain_id":2,"attention":"paused","starting_condition":"at_risk"}]}'
         ),
     )
     assert saved["status"].startswith("200")
@@ -1148,6 +1151,7 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
     assert empty_context == {
         "iso_year": 2026,
         "iso_week": 29,
+        "is_current_week": True,
         "lifecycle": "provisional",
         "editable": True,
         "review_domains": [{"domain_id": 1, "name": "Work", "minimum_acceptable_level": None}],
@@ -1159,7 +1163,9 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
         app,
         "PUT",
         "/workspaces/1/weeks/2026/29",
-        body=(b'{"lifecycle":"final","states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}'),
+        body=(
+            b'{"lifecycle":"final","states":[{"domain_id":1,"attention":"maintained","starting_condition":"stable"}]}'
+        ),
     )
     provisional = json.loads(created["body"])
     assert provisional["lifecycle"] == "provisional"
@@ -1174,7 +1180,7 @@ def test_lifecycle_api_is_computed_and_does_not_create_missing_reviews(tmp_path:
         app,
         "PUT",
         "/workspaces/1/weeks/2026/29",
-        body=b'{"states":[{"domain_id":1,"attention":"maintained","condition":"stable"}]}',
+        body=b'{"states":[{"domain_id":1,"attention":"maintained","starting_condition":"stable"}]}',
     )
     assert rejected["status"].startswith("409")
     assert "final and can no longer be edited" in rejected["body"]
@@ -1639,3 +1645,98 @@ def test_week_rejects_final_week_edits(session: Session) -> None:
                 ),
             ],
         )
+
+
+def test_week_response_is_uninitialized_flag_current_uninitialized(session: Session) -> None:
+    """Test that is_uninitialized=True for current uninitialized week."""
+    from traect.api.serializers import week_response
+
+    clock = MutableClock(week_clock(2026, 30))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+
+    # Create an uninitialized week (no states, or states with both NULL)
+    week = service.upsert_week(workspace.id, 2026, 30, states=None)
+
+    # Check response
+    response = week_response(week, ReviewLifecycle.PROVISIONAL, is_current_week=True)
+    assert response["is_current_week"] is True
+    assert response["is_uninitialized"] is True
+
+
+def test_week_response_is_uninitialized_flag_current_initialized(session: Session) -> None:
+    """Test that is_uninitialized=False for current initialized week."""
+    from traect.api.serializers import week_response
+
+    clock = MutableClock(week_clock(2026, 30))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    # Create an initialized week
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        30,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+        ],
+    )
+
+    # Check response
+    response = week_response(week, ReviewLifecycle.PROVISIONAL, is_current_week=True)
+    assert response["is_current_week"] is True
+    assert response["is_uninitialized"] is False
+
+
+def test_week_response_is_uninitialized_flag_past_week(session: Session) -> None:
+    """Test that is_uninitialized flag is correct even when marking week as not current."""
+    from traect.api.serializers import week_response
+
+    clock = MutableClock(week_clock(2026, 30))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+
+    # Create an uninitialized week
+    week = service.upsert_week(workspace.id, 2026, 30, states=None)
+
+    # Check response as if it's not the current week (e.g., when retrieved from history)
+    response = week_response(week, ReviewLifecycle.PROVISIONAL, is_current_week=False)
+    assert response["is_current_week"] is False
+    assert response["is_uninitialized"] is True
+
+
+def test_week_response_is_uninitialized_flag_after_initialization(session: Session) -> None:
+    """Test that is_uninitialized becomes False after successful initialization."""
+    from traect.api.serializers import week_response
+
+    clock = MutableClock(week_clock(2026, 30))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    # Create uninitialized week
+    week = service.upsert_week(workspace.id, 2026, 30, states=None)
+    assert week_response(week, ReviewLifecycle.PROVISIONAL, is_current_week=True)["is_uninitialized"] is True
+
+    # Initialize it
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        30,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+        ],
+    )
+
+    # Check that flag is now False
+    response = week_response(week, ReviewLifecycle.PROVISIONAL, is_current_week=True)
+    assert response["is_uninitialized"] is False

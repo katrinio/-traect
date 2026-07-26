@@ -70,6 +70,7 @@ const el = {
   reviewStatus: document.getElementById("review-status"),
   manageStatus: document.getElementById("manage-status"),
   editReviewButton: document.getElementById("edit-review"),
+  setupPendingIndicator: document.getElementById("setup-pending-indicator"),
   backToCurrentButton: document.getElementById("back-to-current"),
 };
 
@@ -192,6 +193,14 @@ function renderCurrentMetadata() {
     }
   }
   if (el.editReviewButton) el.editReviewButton.textContent = state.currentReview ? "Edit review" : "Start review";
+
+  if (el.setupPendingIndicator) {
+    const shouldShowIndicator =
+      state.currentWeek &&
+      state.currentWeek.is_current_week &&
+      !state.currentReview;  // No review yet = uninitialized
+    el.setupPendingIndicator.classList.toggle("hidden", !shouldShowIndicator);
+  }
 }
 
 function renderNavigation() {

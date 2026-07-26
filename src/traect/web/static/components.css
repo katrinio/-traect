@@ -638,3 +638,26 @@ button:focus {
   flex-shrink: 0;
 }
 
+
+.edit-review-container {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.setup-pending-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--critical);
+  border: 1px solid var(--critical);
+  border-radius: 50%;
+}
+
+.setup-pending-indicator.hidden {
+  display: none;
+}

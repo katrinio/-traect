@@ -139,7 +139,7 @@ def dispatch(
         and parts[3] == "current"
     ):
         week = service.get_current_week(int(parts[1]))
-        return week_response(week, service.review_lifecycle(week))
+        return week_response(week, service.review_lifecycle(week), is_current_week=True)
     if method == "GET" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "weeks":
         weeks = service.list_weeks(int(parts[1]))
         return {"items": [week_response(week, service.review_lifecycle(week)) for week in weeks]}
@@ -168,6 +168,8 @@ def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, An
         )
         for item in payload.get("states", [])
     ]
+    iso_year, iso_week = service.current_iso_week()
+    is_current = int(parts[3]) == iso_year and int(parts[4]) == iso_week
     week = service.upsert_week(
         int(parts[1]),
         int(parts[3]),
@@ -177,4 +179,4 @@ def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, An
         notes=payload.get("notes"),
         states=states or None,
     )
-    return week_response(week, service.review_lifecycle(week))
+    return week_response(week, service.review_lifecycle(week), is_current_week=is_current)

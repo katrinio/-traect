@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from traect.app.service import TraectService
+from traect.app.service import TraectService, _get_week_initialization_state, _WeekDataState
 from traect.domain.enums import ReviewLifecycle
 
 
@@ -36,15 +36,21 @@ def current_week_context_response(service: TraectService, workspace_id: int) -> 
     return {
         "iso_year": iso_year,
         "iso_week": iso_week,
+        "is_current_week": True,
         "lifecycle": ReviewLifecycle.PROVISIONAL,
         "editable": True,
         "review_domains": review_domains,
-        "review": week_response(review, ReviewLifecycle.PROVISIONAL) if review is not None else None,
+        "review": week_response(review, ReviewLifecycle.PROVISIONAL, is_current_week=True)
+        if review is not None
+        else None,
     }
 
 
-def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
+def week_response(week: Any, lifecycle: ReviewLifecycle, is_current_week: bool = False) -> dict[str, Any]:
     primary_focus = week.primary_focus_state()
+    initialization_state = _get_week_initialization_state(week)
+    # None (no domain_states) or UNINITIALIZED (both NULL) = uninitialized
+    is_uninitialized = initialization_state is None or initialization_state == _WeekDataState.UNINITIALIZED
     return {
         "id": week.id,
         "workspace_id": week.workspace_id,
@@ -52,6 +58,8 @@ def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
         "iso_week": week.iso_week,
         "lifecycle": lifecycle,
         "editable": lifecycle == ReviewLifecycle.PROVISIONAL,
+        "is_current_week": is_current_week,
+        "is_uninitialized": is_uninitialized,
         "starts_on": week.starts_on,
         "ends_on": week.ends_on,
         "main_focus": (
