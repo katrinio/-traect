@@ -37,7 +37,7 @@ class _WeekDataState:
     INITIALIZED = "initialized"  # starting_condition IS NOT NULL AND condition IS NULL
 
 
-def _classify_week_domain_state(state: WeekDomainState) -> str:
+def classify_week_domain_state(state: WeekDomainState) -> str:
     """Classify a WeekDomainState into one of three semantic states."""
     if state.starting_condition is not None and state.condition is None:
         return _WeekDataState.INITIALIZED
@@ -55,7 +55,7 @@ def _classify_week_domain_state(state: WeekDomainState) -> str:
     )
 
 
-def _get_week_initialization_state(week: Week) -> str | None:
+def get_week_initialization_state(week: Week) -> str | None:
     """Determine overall initialization state of a week.
 
     Returns:
@@ -68,7 +68,7 @@ def _get_week_initialization_state(week: Week) -> str | None:
     if not week.domain_states:
         return None
 
-    states = {_classify_week_domain_state(state) for state in week.domain_states}
+    states = {classify_week_domain_state(state) for state in week.domain_states}
 
     if len(states) > 1:
         raise ValueError(
@@ -284,7 +284,7 @@ class TraectService:
         active_domain_ids = set(active_domains_by_id)
 
         # Determine the week's current initialization state
-        original_week_init_state = _get_week_initialization_state(week)
+        original_week_init_state = get_week_initialization_state(week)
         # Note: None means empty week (no domain_states), treat as UNINITIALIZED for validation
         week_init_state = (
             original_week_init_state if original_week_init_state is not None else _WeekDataState.UNINITIALIZED

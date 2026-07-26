@@ -21,7 +21,7 @@ from tests.support import wsgi_request as _request
 from traect.api.app import build_app, server_address_from_environment
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
-from traect.app.service import TraectService, WeekStateInput, _get_week_initialization_state
+from traect.app.service import TraectService, WeekStateInput, get_week_initialization_state
 from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Week, WeekDomainState
 
@@ -1557,7 +1557,7 @@ def test_week_detects_mixed_state_consistency_error(session: Session) -> None:
     # Try to read it - should fail with mixed state error
     fresh_week = session.execute(select(Week).where(Week.id == week.id)).scalar_one()
     with pytest.raises(ValueError, match="mixed domain state types"):
-        _get_week_initialization_state(fresh_week)
+        get_week_initialization_state(fresh_week)
 
 
 def test_week_rejects_empty_states_on_existing_week(session: Session) -> None:
