@@ -37,7 +37,7 @@ export function collectReviewPayload(domains) {
     states: domains.map((domain) => ({
       domain_id: domain.id,
       attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
-      condition: document.querySelector(`select[name="condition_${domain.id}"]`).value,
+      starting_condition: document.querySelector(`select[name="starting_condition_${domain.id}"]`).value,
       comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
     })),
   };
@@ -53,6 +53,7 @@ function renderEditRow(domain, currentState) {
       <span class="minimum-level-value">${escapeHtml(minimumAcceptableLevel)}</span>
     </span>
   ` : "";
+  const isInitialized = currentState?.starting_condition !== null && currentState?.starting_condition !== undefined;
   const row = document.createElement("section");
   row.className = "domain";
   row.innerHTML = `
@@ -65,9 +66,9 @@ function renderEditRow(domain, currentState) {
           ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
-      <label>Condition now
+      <label>Condition at start
         ${minimumContext}
-        <select name="condition_${domain.id}" ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
+        <select name="starting_condition_${domain.id}" ${isInitialized ? "disabled" : ""} ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
           ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
@@ -82,12 +83,13 @@ function renderEditRow(domain, currentState) {
     </div>
   `;
   const attentionSelect = row.querySelector(`select[name="attention_${domain.id}"]`);
+  const startingConditionSelect = row.querySelector(`select[name="starting_condition_${domain.id}"]`);
   const commentInput = row.querySelector(`textarea[name="comment_${domain.id}"]`);
   const commentSummary = row.querySelector(".domain-context summary");
   const characterCount = row.querySelector(".character-count");
 
   attentionSelect.value = currentState?.attention || "paused";
-  row.querySelector(`select[name="condition_${domain.id}"]`).value = currentState?.condition || "stable";
+  startingConditionSelect.value = currentState?.starting_condition || "stable";
   commentInput.value = comment;
   updateCommentContext(commentInput, commentSummary, characterCount);
 

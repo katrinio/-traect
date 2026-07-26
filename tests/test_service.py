@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -21,7 +21,7 @@ from tests.support import wsgi_request as _request
 from traect.api.app import build_app, server_address_from_environment
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
-from traect.app.service import TraectService, WeekStateInput
+from traect.app.service import TraectService, WeekStateInput, _get_week_initialization_state
 from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Week, WeekDomainState
 
@@ -148,7 +148,7 @@ def test_reorder_archive_restore(session: Session) -> None:
 
 
 def test_rename_domain(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     domain = service.create_domain(workspace.id, "Work")
 
@@ -158,7 +158,7 @@ def test_rename_domain(session: Session) -> None:
 
 
 def test_week_upsert_is_idempotent(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
@@ -171,8 +171,18 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
         sacrifice_reason="Release",
         notes="Tight week",
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS, "Shipped"),
-            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED, "Limited sleep"),
+            WeekStateInput(
+                work.id,
+                attention=DomainAttention.PRIMARY_FOCUS,
+                starting_condition=DomainCondition.STABLE,
+                comment="Shipped",
+            ),
+            WeekStateInput(
+                health.id,
+                attention=DomainAttention.MAINTAINED,
+                starting_condition=DomainCondition.AT_RISK,
+                comment="Limited sleep",
+            ),
         ],
     )
     week2 = service.upsert_week(
@@ -183,8 +193,18 @@ def test_week_upsert_is_idempotent(session: Session) -> None:
         sacrifice_reason="Release",
         notes="Tight week",
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS, "Shipped"),
-            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED, "Limited sleep"),
+            WeekStateInput(
+                work.id,
+                attention=DomainAttention.PRIMARY_FOCUS,
+                starting_condition=DomainCondition.STABLE,
+                comment="Shipped",
+            ),
+            WeekStateInput(
+                health.id,
+                attention=DomainAttention.MAINTAINED,
+                starting_condition=DomainCondition.AT_RISK,
+                comment="Limited sleep",
+            ),
         ],
     )
 
@@ -206,8 +226,8 @@ def test_service_logs_basic_state_changes(session: Session, caplog: pytest.LogCa
         sacrificed_domain_id=health.id,
         sacrifice_reason="Release",
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
-            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED),
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE),
+            WeekStateInput(health.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.AT_RISK),
         ],
     )
 
@@ -218,7 +238,7 @@ def test_service_logs_basic_state_changes(session: Session, caplog: pytest.LogCa
 
 
 def test_week_derives_a_single_main_focus_from_domain_attention(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
@@ -228,8 +248,8 @@ def test_week_derives_a_single_main_focus_from_domain_attention(session: Session
         2026,
         29,
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
-            WeekStateInput(health.id, DomainCondition.STABLE, DomainAttention.MAINTAINED),
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE),
+            WeekStateInput(health.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE),
         ],
     )
 
@@ -239,7 +259,7 @@ def test_week_derives_a_single_main_focus_from_domain_attention(session: Session
 
 
 def test_week_rejects_multiple_primary_focus_domains(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
@@ -250,14 +270,18 @@ def test_week_rejects_multiple_primary_focus_domains(session: Session) -> None:
             2026,
             29,
             states=[
-                WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
-                WeekStateInput(health.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+                WeekStateInput(
+                    work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                ),
+                WeekStateInput(
+                    health.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                ),
             ],
         )
 
 
 def test_week_rejects_duplicate_domain_states(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -267,26 +291,30 @@ def test_week_rejects_duplicate_domain_states(session: Session) -> None:
             2026,
             29,
             states=[
-                WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED),
-                WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
+                WeekStateInput(
+                    work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE
+                ),
+                WeekStateInput(
+                    work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                ),
             ],
         )
 
 
 @pytest.mark.parametrize(
-    ("attention", "condition", "message"),
+    ("attention", "starting_condition", "message"),
     [
         ("unexpected", DomainCondition.STABLE, "invalid attention"),
-        (DomainAttention.MAINTAINED, "unexpected", "invalid condition"),
+        (DomainAttention.MAINTAINED, "unexpected", "invalid starting_condition"),
     ],
 )
 def test_week_rejects_invalid_runtime_enum_values(
     session: Session,
     attention: Any,
-    condition: Any,
+    starting_condition: Any,
     message: str,
 ) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -298,15 +326,15 @@ def test_week_rejects_invalid_runtime_enum_values(
             states=[
                 WeekStateInput(
                     work.id,
-                    cast(DomainCondition, condition),
-                    cast(DomainAttention, attention),
+                    attention=cast(DomainAttention, attention),
+                    starting_condition=cast(DomainCondition, starting_condition),
                 )
             ],
         )
 
 
 def test_week_rejects_sacrifice_missing_from_snapshot(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     archived = service.create_domain(workspace.id, "Archived")
@@ -318,12 +346,16 @@ def test_week_rejects_sacrifice_missing_from_snapshot(session: Session) -> None:
             2026,
             29,
             sacrificed_domain_id=archived.id,
-            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
+            states=[
+                WeekStateInput(
+                    work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                )
+            ],
         )
 
 
 def test_changing_primary_focus_updates_only_attention(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
     health = service.create_domain(workspace.id, "Health")
@@ -332,8 +364,10 @@ def test_changing_primary_focus_updates_only_attention(session: Session) -> None
         2026,
         29,
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED),
-            WeekStateInput(health.id, DomainCondition.CRITICAL, DomainAttention.PRIMARY_FOCUS),
+            WeekStateInput(work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE),
+            WeekStateInput(
+                health.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.CRITICAL
+            ),
         ],
     )
 
@@ -342,22 +376,24 @@ def test_changing_primary_focus_updates_only_attention(session: Session) -> None
         2026,
         29,
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
-            WeekStateInput(health.id, DomainCondition.CRITICAL, DomainAttention.MAINTAINED),
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE),
+            WeekStateInput(
+                health.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.CRITICAL
+            ),
         ],
     )
 
     states = {state.domain_id: state for state in week.domain_states}
     assert states[work.id].attention == DomainAttention.PRIMARY_FOCUS
-    assert states[work.id].condition == DomainCondition.STABLE
+    assert states[work.id].starting_condition == DomainCondition.STABLE
     assert states[health.id].attention == DomainAttention.MAINTAINED
-    assert states[health.id].condition == DomainCondition.CRITICAL
+    assert states[health.id].starting_condition == DomainCondition.CRITICAL
     primary_focus = week.primary_focus_state()
     assert primary_focus is not None and primary_focus.domain_id == work.id
 
 
 def test_week_rejects_domain_context_over_300_characters(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -366,12 +402,19 @@ def test_week_rejects_domain_context_over_300_characters(session: Session) -> No
             workspace.id,
             2026,
             29,
-            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED, "x" * 301)],
+            states=[
+                WeekStateInput(
+                    work.id,
+                    attention=DomainAttention.MAINTAINED,
+                    starting_condition=DomainCondition.STABLE,
+                    comment="x" * 301,
+                )
+            ],
         )
 
 
 def test_week_rejects_what_gave_way_without_a_main_focus(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -381,12 +424,14 @@ def test_week_rejects_what_gave_way_without_a_main_focus(session: Session) -> No
             2026,
             29,
             sacrificed_domain_id=work.id,
-            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
+            states=[
+                WeekStateInput(work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE)
+            ],
         )
 
 
 def test_week_rejects_trade_off_reason_without_what_gave_way(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
 
@@ -396,7 +441,11 @@ def test_week_rejects_trade_off_reason_without_what_gave_way(session: Session) -
             2026,
             29,
             sacrifice_reason="Release",
-            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
+            states=[
+                WeekStateInput(
+                    work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                )
+            ],
         )
 
 
@@ -412,8 +461,8 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
         2026,
         28,
         states=[
-            WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS),
-            WeekStateInput(health.id, DomainCondition.AT_RISK, DomainAttention.MAINTAINED),
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE),
+            WeekStateInput(health.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.AT_RISK),
         ],
     )
     service.archive_domain(health.id)
@@ -429,7 +478,9 @@ def test_archived_domains_excluded_from_new_reviews_but_kept_in_history(session:
         workspace.id,
         2026,
         29,
-        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
+        states=[
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE)
+        ],
     )
     assert {state.domain_id for state in next_week.domain_states} == {work.id}
 
@@ -443,7 +494,9 @@ def test_historical_states_remain_available_after_archival(session: Session) -> 
         workspace.id,
         2026,
         28,
-        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
+        states=[
+            WeekStateInput(work.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE)
+        ],
     )
     service.archive_domain(work.id)
 
@@ -451,7 +504,7 @@ def test_historical_states_remain_available_after_archival(session: Session) -> 
 
 
 def test_cross_workspace_relationship_validation(session: Session) -> None:
-    service = TraectService(session)
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
     workspace_a = service.create_workspace("A")
     workspace_b = service.create_workspace("B")
     domain_a = service.create_domain(workspace_a.id, "Work")
@@ -462,7 +515,11 @@ def test_cross_workspace_relationship_validation(session: Session) -> None:
             workspace_b.id,
             2026,
             29,
-            states=[WeekStateInput(domain_a.id, DomainCondition.STABLE, DomainAttention.PRIMARY_FOCUS)],
+            states=[
+                WeekStateInput(
+                    domain_a.id, attention=DomainAttention.PRIMARY_FOCUS, starting_condition=DomainCondition.STABLE
+                )
+            ],
         )
 
     with pytest.raises(ValidationError):
@@ -997,7 +1054,9 @@ def test_history_is_reverse_chronological_and_bounded_to_52_weeks(session: Sessi
             workspace.id,
             iso_year,
             iso_week,
-            states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
+            states=[
+                WeekStateInput(work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE)
+            ],
         )
 
     history = service.list_weeks(workspace.id)
@@ -1062,7 +1121,7 @@ def test_provisional_review_updates_idempotently_then_becomes_final(session: Ses
     service = TraectService(session, clock=clock)
     workspace = service.create_workspace("Life")
     work = service.create_domain(workspace.id, "Work")
-    states = [WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)]
+    states = [WeekStateInput(work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE)]
 
     first = service.upsert_week(workspace.id, 2026, 29, notes="First", states=states)
     second = service.upsert_week(workspace.id, 2026, 29, notes="Updated", states=states)
@@ -1154,10 +1213,429 @@ def test_viewing_lifecycle_does_not_mutate_review(session: Session) -> None:
         workspace.id,
         2026,
         29,
-        states=[WeekStateInput(work.id, DomainCondition.STABLE, DomainAttention.MAINTAINED)],
+        states=[
+            WeekStateInput(work.id, attention=DomainAttention.MAINTAINED, starting_condition=DomainCondition.STABLE)
+        ],
     )
     original_updated_at = week.updated_at
 
     assert service.review_lifecycle(service.get_current_week(workspace.id)) == ReviewLifecycle.PROVISIONAL
     assert len(service.list_weeks(workspace.id)) == 1
     assert week.updated_at == original_updated_at
+
+
+# ============================================================================
+# Atomic Initialization Tests: Starting Condition Immutability
+# ============================================================================
+
+
+def test_week_atomic_initialization_all_domains(session: Session) -> None:
+    """Test successful atomic initialization with starting_condition for all domains."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+            WeekStateInput(
+                health.id,
+                starting_condition=DomainCondition.AT_RISK,
+                attention=DomainAttention.MAINTAINED,
+            ),
+        ],
+    )
+
+    states = {state.domain_id: state for state in week.domain_states}
+    assert states[work.id].starting_condition == DomainCondition.STABLE
+    assert states[health.id].starting_condition == DomainCondition.AT_RISK
+    assert states[work.id].attention == DomainAttention.PRIMARY_FOCUS
+    assert states[health.id].attention == DomainAttention.MAINTAINED
+
+
+def test_week_rejects_partial_initialization(session: Session) -> None:
+    """Test that initialization requires starting_condition for ALL active domains."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    with pytest.raises(ValidationError, match="Initial week review requires starting_condition"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.PRIMARY_FOCUS,
+                ),
+                WeekStateInput(
+                    health.id,
+                    starting_condition=None,  # Missing!
+                    attention=DomainAttention.MAINTAINED,
+                ),
+            ],
+        )
+
+
+def test_week_rejects_extra_domains_in_initialization(session: Session) -> None:
+    """Test that initialization rejects extra domain_ids not in active list."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match="must contain one state for each active domain"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.PRIMARY_FOCUS,
+                ),
+                WeekStateInput(
+                    9999,  # Non-existent domain
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.MAINTAINED,
+                ),
+            ],
+        )
+
+
+def test_week_rejects_missing_domains_in_initialization(session: Session) -> None:
+    """Test that initialization rejects missing active domains."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    service.create_domain(workspace.id, "Health")  # Create health but don't provide it in states
+
+    with pytest.raises(ValidationError, match="must contain one state for each active domain"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.PRIMARY_FOCUS,
+                ),
+                # Missing health domain!
+            ],
+        )
+
+
+def test_week_rejects_duplicate_domain_ids_in_initialization(session: Session) -> None:
+    """Test that initialization rejects duplicate domain_ids."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    with pytest.raises(ValidationError, match="duplicate Domain states"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.PRIMARY_FOCUS,
+                ),
+                WeekStateInput(
+                    work.id,  # Duplicate!
+                    starting_condition=DomainCondition.CRITICAL,
+                    attention=DomainAttention.MAINTAINED,
+                ),
+            ],
+        )
+
+
+def test_week_rejects_starting_condition_change_when_initialized(session: Session) -> None:
+    """Test that starting_condition is immutable once initialized."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    # First save with starting_condition
+    service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+            WeekStateInput(
+                health.id,
+                starting_condition=DomainCondition.AT_RISK,
+                attention=DomainAttention.MAINTAINED,
+            ),
+        ],
+    )
+
+    # Try to change starting_condition on second save
+    with pytest.raises(ConflictError, match="Starting condition is immutable"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.CRITICAL,  # Changed!
+                    attention=DomainAttention.PRIMARY_FOCUS,
+                ),
+                WeekStateInput(
+                    health.id,
+                    starting_condition=DomainCondition.AT_RISK,
+                    attention=DomainAttention.MAINTAINED,
+                ),
+            ],
+        )
+
+
+def test_week_allows_attention_change_when_initialized(session: Session) -> None:
+    """Test that attention and other fields can be changed after initialization."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    # First save
+    service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+            WeekStateInput(
+                health.id,
+                starting_condition=DomainCondition.AT_RISK,
+                attention=DomainAttention.MAINTAINED,
+            ),
+        ],
+    )
+
+    # Change attention and comment
+    week2 = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.MAINTAINED,  # Changed
+                comment="Delegated priorities",
+            ),
+            WeekStateInput(
+                health.id,
+                starting_condition=DomainCondition.AT_RISK,
+                attention=DomainAttention.PRIMARY_FOCUS,  # Changed
+                comment="Now focusing here",
+            ),
+        ],
+    )
+
+    states = {state.domain_id: state for state in week2.domain_states}
+    # starting_condition unchanged
+    assert states[work.id].starting_condition == DomainCondition.STABLE
+    assert states[health.id].starting_condition == DomainCondition.AT_RISK
+    # attention changed
+    assert states[work.id].attention == DomainAttention.MAINTAINED
+    assert states[health.id].attention == DomainAttention.PRIMARY_FOCUS
+    # comments updated
+    assert states[work.id].comment == "Delegated priorities"
+    assert states[health.id].comment == "Now focusing here"
+
+
+def test_week_legacy_record_reading(session: Session) -> None:
+    """Test backward compatibility with legacy records (condition-based, no starting_condition)."""
+    service = TraectService(session)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    # Manually create a legacy record (old style with condition, no starting_condition)
+    now = datetime.now(UTC)
+    session.execute(
+        text(
+            """
+            INSERT INTO week (workspace_id, iso_year, iso_week, starts_on, ends_on)
+            VALUES (:ws_id, 2026, 28, '2026-07-06', '2026-07-12')
+            """
+        ),
+        {"ws_id": workspace.id},
+    )
+    session.flush()
+    week_row = session.execute(text("SELECT id FROM week WHERE iso_year = 2026 AND iso_week = 28")).scalar()
+
+    session.execute(
+        text(
+            """
+            INSERT INTO week_domain_state
+            (week_id, domain_id, domain_name, condition, attention, created_at, updated_at)
+            VALUES (:week_id, :domain_id, :domain_name, :condition, :attention, :created_at, :updated_at)
+            """
+        ),
+        {
+            "week_id": week_row,
+            "domain_id": work.id,
+            "domain_name": work.name,
+            "condition": "critical",  # Legacy style
+            "attention": "primary_focus",
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    session.commit()
+
+    # Read the legacy week - should work fine
+    week = service.session.execute(select(Week).where(Week.iso_year == 2026, Week.iso_week == 28)).scalar_one()
+    assert len(week.domain_states) == 1
+    assert week.domain_states[0].condition == DomainCondition.CRITICAL
+    assert week.domain_states[0].starting_condition is None
+
+
+def test_week_detects_mixed_state_consistency_error(session: Session) -> None:
+    """Test that mixed state detection catches data integrity issues."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+    health = service.create_domain(workspace.id, "Health")
+
+    # Create a valid week
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+            WeekStateInput(
+                health.id,
+                starting_condition=DomainCondition.AT_RISK,
+                attention=DomainAttention.MAINTAINED,
+            ),
+        ],
+    )
+
+    # Corrupt the data by manually setting mixed states
+    health_state = next(s for s in week.domain_states if s.domain_id == health.id)
+    health_state.starting_condition = None
+    health_state.condition = DomainCondition.CRITICAL  # Now it's legacy
+    session.flush()
+
+    # Try to read it - should fail with mixed state error
+    fresh_week = session.execute(select(Week).where(Week.id == week.id)).scalar_one()
+    with pytest.raises(ValueError, match="mixed domain state types"):
+        _get_week_initialization_state(fresh_week)
+
+
+def test_week_rejects_empty_states_on_existing_week(session: Session) -> None:
+    """Test that updating an existing week requires explicit states list."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    # Create initial week
+    service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+        ],
+    )
+
+    # Try to update without providing states - should fail
+    with pytest.raises(ValidationError, match="requires explicit states list"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            29,
+            notes="Updated notes only",
+            states=None,
+        )
+
+
+def test_week_allows_empty_states_on_brand_new_week(session: Session) -> None:
+    """Test that brand new weeks can be created with states=None (but won't have default states anymore)."""
+    service = TraectService(session, clock=lambda: week_clock(2026, 29))
+    workspace = service.create_workspace("Life")
+    service.create_domain(workspace.id, "Work")
+
+    # Create week with no states
+    week = service.upsert_week(
+        workspace.id,
+        2026,
+        29,
+        states=None,
+    )
+
+    # Should have no domain_states (no auto-creation of default states)
+    assert len(week.domain_states) == 0
+
+
+def test_week_rejects_final_week_edits(session: Session) -> None:
+    """Test that FINAL lifecycle weeks cannot be edited."""
+    clock = MutableClock(week_clock(2026, 30))
+    service = TraectService(session, clock=clock)
+    workspace = service.create_workspace("Life")
+    work = service.create_domain(workspace.id, "Work")
+
+    # Create a week in the current week (PROVISIONAL)
+    service.upsert_week(
+        workspace.id,
+        2026,
+        30,
+        states=[
+            WeekStateInput(
+                work.id,
+                starting_condition=DomainCondition.STABLE,
+                attention=DomainAttention.PRIMARY_FOCUS,
+            ),
+        ],
+    )
+
+    # Move time forward - now trying to edit previous week (FINAL)
+    clock.value = week_clock(2026, 31)
+    with pytest.raises(ConflictError, match="final and can no longer be edited"):
+        service.upsert_week(
+            workspace.id,
+            2026,
+            30,
+            states=[
+                WeekStateInput(
+                    work.id,
+                    starting_condition=DomainCondition.STABLE,
+                    attention=DomainAttention.MAINTAINED,
+                ),
+            ],
+        )

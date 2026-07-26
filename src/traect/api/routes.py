@@ -162,7 +162,7 @@ def _upsert_week(service: TraectService, parts: list[str], payload: dict[str, An
     states = [
         WeekStateInput(
             domain_id=item["domain_id"],
-            condition=DomainCondition(item["condition"]),
+            starting_condition=DomainCondition(item["starting_condition"]) if "starting_condition" in item else None,
             attention=DomainAttention(item["attention"]),
             comment=item.get("comment"),
         )

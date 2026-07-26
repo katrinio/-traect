@@ -29,11 +29,61 @@ def _week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
     return starts_on, ends_on
 
 
+class _WeekDataState:
+    """Represents semantic state of a WeekDomainState record."""
+
+    LEGACY = "legacy"  # starting_condition IS NULL AND condition IS NOT NULL
+    UNINITIALIZED = "uninitialized"  # starting_condition IS NULL AND condition IS NULL
+    INITIALIZED = "initialized"  # starting_condition IS NOT NULL AND condition IS NULL
+
+
+def _classify_week_domain_state(state: WeekDomainState) -> str:
+    """Classify a WeekDomainState into one of three semantic states."""
+    if state.starting_condition is not None and state.condition is None:
+        return _WeekDataState.INITIALIZED
+    if state.starting_condition is None and state.condition is not None:
+        return _WeekDataState.LEGACY
+    if state.starting_condition is None and state.condition is None:
+        return _WeekDataState.UNINITIALIZED
+    raise ValueError(
+        f"Invalid WeekDomainState for domain {state.domain_id}: "
+        f"starting_condition={state.starting_condition}, condition={state.condition}. "
+        f"Valid states: "
+        f"(starting_condition NOT NULL, condition NULL), "
+        f"(starting_condition NULL, condition NOT NULL), "
+        f"(starting_condition NULL, condition NULL)"
+    )
+
+
+def _get_week_initialization_state(week: Week) -> str | None:
+    """Determine overall initialization state of a week.
+
+    Returns:
+        _WeekDataState.INITIALIZED if all domain_states are initialized,
+        _WeekDataState.UNINITIALIZED if all are uninitialized,
+        _WeekDataState.LEGACY if all are legacy,
+        None if week has no domain_states,
+        raises ValueError if states are mixed.
+    """
+    if not week.domain_states:
+        return None
+
+    states = {_classify_week_domain_state(state) for state in week.domain_states}
+
+    if len(states) > 1:
+        raise ValueError(
+            f"Week {week.id} has mixed domain state types: {states}. "
+            f"All domain_states must be in the same lifecycle stage."
+        )
+
+    return states.pop()
+
+
 @dataclass(frozen=True)
 class WeekStateInput:
     domain_id: int
-    condition: DomainCondition
     attention: DomainAttention
+    starting_condition: DomainCondition | None = None
     comment: str | None = None
 
 
@@ -232,30 +282,49 @@ class TraectService:
         active_domains = self.list_domains(workspace.id, include_archived=False)
         active_domains_by_id = {domain.id: domain for domain in active_domains}
         active_domain_ids = set(active_domains_by_id)
-        if states is None:
-            # A save without explicit states seeds one neutral state per active
-            # Domain: MAINTAINED attention (no Primary focus asserted) and
-            # AT_RISK condition. These are deliberately non-committal defaults,
-            # not a claim about the week — a caller that omits states is creating
-            # the Week shell, not recording judgements about each Domain.
-            states = [
-                WeekStateInput(
-                    domain_id=domain_id,
-                    condition=DomainCondition.AT_RISK,
-                    attention=DomainAttention.MAINTAINED,
-                )
-                for domain_id in sorted(active_domain_ids)
-            ]
 
-        state_by_domain_id = {state.domain_id: state for state in week.domain_states}
-        self.validate_week_values(
-            states,
-            expected_domain_ids=active_domain_ids,
-            sacrificed_domain_id=sacrificed_domain_id,
-            sacrifice_reason=sacrifice_reason,
-            membership_error="weekly review must contain one state for each active domain",
+        # Determine the week's current initialization state
+        original_week_init_state = _get_week_initialization_state(week)
+        # Note: None means empty week (no domain_states), treat as UNINITIALIZED for validation
+        week_init_state = (
+            original_week_init_state if original_week_init_state is not None else _WeekDataState.UNINITIALIZED
         )
 
+        # If states are provided, validate against the expected initialization flow
+        if states is not None:
+            self.validate_week_values(
+                states,
+                expected_domain_ids=active_domain_ids,
+                sacrificed_domain_id=sacrificed_domain_id,
+                sacrifice_reason=sacrifice_reason,
+                membership_error="weekly review must contain one state for each active domain",
+                current_week_state=week_init_state,
+            )
+
+            # Check for UNINITIALIZED → INITIALIZED transition: requires starting_condition for ALL
+            if week_init_state == _WeekDataState.UNINITIALIZED:
+                # Validate that all states have starting_condition
+                missing_condition = [state for state in states if state.starting_condition is None]
+                if missing_condition:
+                    raise ValidationError("Initial week review requires starting_condition for all active domains")
+            # Check for INITIALIZED state: protect starting_condition from change
+            elif week_init_state == _WeekDataState.INITIALIZED:
+                state_by_domain_id = {state.domain_id: state for state in week.domain_states}
+                for new_state in states:
+                    existing_state = state_by_domain_id.get(new_state.domain_id)
+                    if existing_state is not None and new_state.starting_condition != existing_state.starting_condition:
+                        raise ConflictError(
+                            "Starting condition is immutable once initialized. "
+                            "To change it, you must create a new weekly review."
+                        )
+            # For LEGACY: allow graceful handling (condition-based, no starting_condition validation)
+        # No states provided: only allow if week is completely new (no domain_states at all)
+        # Do not auto-create default states anymore
+        elif original_week_init_state is not None:
+            # Week already has states, require explicit state list to update
+            raise ValidationError("Updating an existing weekly review requires explicit states list")
+
+        # Update mutable fields
         week.sacrificed_domain_id = sacrificed_domain_id
         week.sacrificed_domain_name = (
             self.get_domain(sacrificed_domain_id).name if sacrificed_domain_id is not None else None
@@ -263,44 +332,51 @@ class TraectService:
         week.sacrifice_reason = sacrifice_reason
         week.notes = notes
 
-        # Primary focus is enforced by a partial unique index (one primary_focus
-        # row per Week). Moving focus from Domain A to Domain B must therefore
-        # happen in two flushed steps: first demote any previously saved
-        # primary_focus row that is no longer primary_focus in the incoming
-        # states, then flush so the old row is gone before the loop below writes
-        # the new one. Merging these into a single pass would momentarily leave
-        # two primary_focus rows in the Week and violate the index — do not
-        # "simplify" the intermediate flush away.
-        input_by_domain_id = {state.domain_id: state for state in states}
-        for saved_state in week.domain_states:
-            desired_state = input_by_domain_id.get(saved_state.domain_id)
-            if saved_state.attention == DomainAttention.PRIMARY_FOCUS and (
-                desired_state is None or desired_state.attention != DomainAttention.PRIMARY_FOCUS
-            ):
-                saved_state.attention = DomainAttention.MAINTAINED
-        self.session.flush()
+        # Only proceed with state updates if states were provided
+        if states is not None:
+            state_by_domain_id = {state.domain_id: state for state in week.domain_states}
 
-        for state_input in states:
-            self._validate_domain_in_workspace(state_input.domain_id, workspace.id)
-            current = state_by_domain_id.get(state_input.domain_id)
-            domain = active_domains_by_id[state_input.domain_id]
-            if current is None:
-                state = WeekDomainState(
-                    domain_name=domain.name,
-                    condition=state_input.condition,
-                    attention=state_input.attention,
-                    minimum_acceptable_level_snapshot=domain.minimum_acceptable_level,
-                    comment=state_input.comment,
-                )
-                state.week_id = week.id
-                state.domain_id = state_input.domain_id
-                week.domain_states.append(state)
-            else:
-                current.domain_name = domain.name
-                current.condition = state_input.condition
-                current.attention = state_input.attention
-                current.minimum_acceptable_level_snapshot = domain.minimum_acceptable_level
-                current.comment = state_input.comment
+            # Primary focus is enforced by a partial unique index (one primary_focus
+            # row per Week). Moving focus from Domain A to Domain B must therefore
+            # happen in two flushed steps: first demote any previously saved
+            # primary_focus row that is no longer primary_focus in the incoming
+            # states, then flush so the old row is gone before the loop below writes
+            # the new one. Merging these into a single pass would momentarily leave
+            # two primary_focus rows in the Week and violate the index — do not
+            # "simplify" the intermediate flush away.
+            input_by_domain_id = {state.domain_id: state for state in states}
+            for saved_state in week.domain_states:
+                desired_state = input_by_domain_id.get(saved_state.domain_id)
+                if saved_state.attention == DomainAttention.PRIMARY_FOCUS and (
+                    desired_state is None or desired_state.attention != DomainAttention.PRIMARY_FOCUS
+                ):
+                    saved_state.attention = DomainAttention.MAINTAINED
+            self.session.flush()
+
+            # Update or create domain states
+            for state_input in states:
+                self._validate_domain_in_workspace(state_input.domain_id, workspace.id)
+                current = state_by_domain_id.get(state_input.domain_id)
+                domain = active_domains_by_id[state_input.domain_id]
+                if current is None:
+                    # Create new state - set starting_condition for new (UNINITIALIZED → INITIALIZED) transitions
+                    state = WeekDomainState(
+                        domain_name=domain.name,
+                        starting_condition=state_input.starting_condition,
+                        attention=state_input.attention,
+                        minimum_acceptable_level_snapshot=domain.minimum_acceptable_level,
+                        comment=state_input.comment,
+                    )
+                    state.week_id = week.id
+                    state.domain_id = state_input.domain_id
+                    week.domain_states.append(state)
+                else:
+                    # Update existing state: protect starting_condition, allow other fields
+                    current.domain_name = domain.name
+                    # starting_condition is immutable; don't update it
+                    current.attention = state_input.attention
+                    current.minimum_acceptable_level_snapshot = domain.minimum_acceptable_level
+                    current.comment = state_input.comment
 
         self.session.flush()
         logger.info(
@@ -310,7 +386,7 @@ class TraectService:
             week.id,
             iso_year,
             iso_week,
-            len(states),
+            len(states) if states else 0,
             created,
             sacrificed_domain_id,
         )
@@ -324,6 +400,7 @@ class TraectService:
         sacrificed_domain_id: int | None,
         sacrifice_reason: str | None,
         membership_error: str,
+        current_week_state: str | None = None,
     ) -> None:
         incoming_domain_ids = {state.domain_id for state in states}
         if len(incoming_domain_ids) != len(states):
@@ -332,8 +409,11 @@ class TraectService:
             raise ValidationError(membership_error)
         if any(not isinstance(state.attention, DomainAttention) for state in states):
             raise ValidationError("weekly review contains an invalid attention value")
-        if any(not isinstance(state.condition, DomainCondition) for state in states):
-            raise ValidationError("weekly review contains an invalid condition value")
+
+        # Validate starting_condition is valid when provided
+        for state in states:
+            if state.starting_condition is not None and not isinstance(state.starting_condition, DomainCondition):
+                raise ValidationError("weekly review contains an invalid starting_condition value")
 
         focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
         if len(focused_domain_ids) > 1:

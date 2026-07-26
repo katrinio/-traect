@@ -67,6 +67,7 @@ def week_response(week: Any, lifecycle: ReviewLifecycle) -> dict[str, Any]:
             {
                 "domain_id": state.domain_id,
                 "domain_name": state.domain_name,
+                "starting_condition": state.starting_condition,
                 "condition": state.condition,
                 "attention": state.attention,
                 "minimum_acceptable_level": state.minimum_acceptable_level_snapshot,
