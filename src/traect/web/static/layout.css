@@ -720,10 +720,47 @@ section {
 
 .current-row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-1) 0;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.current-row:last-child {
+  border-bottom: 0;
+}
+
+.current-row-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.domain-name {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: var(--space-1);
+}
+
+.current-state-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.state-label {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.attention-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text);
 }
 
 .domain-list {
@@ -858,8 +895,19 @@ section {
 
 .domain-grid {
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+  grid-template-columns: auto 1fr;
+}
+
+.grid-label {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  align-self: center;
+  white-space: nowrap;
+}
+
+.grid-value {
+  align-self: center;
 }
 
 .domain-actions {
@@ -915,6 +963,11 @@ section {
 
   .domain-grid {
     grid-template-columns: 1fr;
+    gap: var(--space-2) 0;
+  }
+
+  .grid-label {
+    white-space: normal;
   }
 
   .tradeoff-row {
