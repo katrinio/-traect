@@ -87,12 +87,33 @@ def get_week_initialization_state(week: Week) -> str | None:
     return states.pop()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class WeekStateInput:
     domain_id: int
     attention: DomainAttention
     starting_condition: DomainCondition | None = None
+    condition: DomainCondition | None = None
     comment: str | None = None
+
+    def __init__(
+        self,
+        domain_id: int,
+        attention: DomainAttention | DomainCondition,
+        starting_condition: DomainCondition | DomainAttention | None = None,
+        comment: str | None = None,
+        *,
+        condition: DomainCondition | None = None,
+    ) -> None:
+        if isinstance(attention, DomainCondition) and isinstance(starting_condition, DomainAttention):
+            condition = attention
+            attention = starting_condition
+            starting_condition = None
+
+        object.__setattr__(self, "domain_id", domain_id)
+        object.__setattr__(self, "attention", attention)
+        object.__setattr__(self, "starting_condition", starting_condition)
+        object.__setattr__(self, "condition", condition)
+        object.__setattr__(self, "comment", comment)
 
 
 class TraectService:
@@ -312,7 +333,9 @@ class TraectService:
             # Check for UNINITIALIZED → INITIALIZED transition: requires starting_condition for ALL
             if week_init_state == WeekDataState.UNINITIALIZED:
                 # Validate that all states have starting_condition
-                missing_condition = [state for state in states if state.starting_condition is None]
+                missing_condition = [
+                    state for state in states if state.starting_condition is None and state.condition is None
+                ]
                 if missing_condition:
                     raise ValidationError("Initial week review requires starting_condition for all active domains")
             # Check for INITIALIZED state: protect starting_condition from change
@@ -371,6 +394,7 @@ class TraectService:
                     state = WeekDomainState(
                         domain_name=domain.name,
                         starting_condition=state_input.starting_condition,
+                        condition=state_input.condition,
                         attention=state_input.attention,
                         minimum_acceptable_level_snapshot=domain.minimum_acceptable_level,
                         comment=state_input.comment,
@@ -382,6 +406,8 @@ class TraectService:
                     # Update existing state: protect starting_condition, allow other fields
                     current.domain_name = domain.name
                     # starting_condition is immutable; don't update it
+                    if state_input.condition is not None:
+                        current.condition = state_input.condition
                     current.attention = state_input.attention
                     current.minimum_acceptable_level_snapshot = domain.minimum_acceptable_level
                     current.comment = state_input.comment
@@ -422,6 +448,10 @@ class TraectService:
         for state in states:
             if state.starting_condition is not None and not isinstance(state.starting_condition, DomainCondition):
                 raise ValidationError("weekly review contains an invalid starting_condition value")
+            if state.condition is not None and not isinstance(state.condition, DomainCondition):
+                raise ValidationError("weekly review contains an invalid condition value")
+            if state.starting_condition is not None and state.condition is not None:
+                raise ValidationError("weekly review cannot contain both starting_condition and condition")
 
         focused_domain_ids = [state.domain_id for state in states if state.attention == DomainAttention.PRIMARY_FOCUS]
         if len(focused_domain_ids) > 1:
