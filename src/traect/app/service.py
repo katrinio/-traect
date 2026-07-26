@@ -29,7 +29,7 @@ def _week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
     return starts_on, ends_on
 
 
-class _WeekDataState:
+class WeekDataState:
     """Represents semantic state of a WeekDomainState record."""
 
     LEGACY = "legacy"  # starting_condition IS NULL AND condition IS NOT NULL
@@ -40,11 +40,11 @@ class _WeekDataState:
 def classify_week_domain_state(state: WeekDomainState) -> str:
     """Classify a WeekDomainState into one of three semantic states."""
     if state.starting_condition is not None and state.condition is None:
-        return _WeekDataState.INITIALIZED
+        return WeekDataState.INITIALIZED
     if state.starting_condition is None and state.condition is not None:
-        return _WeekDataState.LEGACY
+        return WeekDataState.LEGACY
     if state.starting_condition is None and state.condition is None:
-        return _WeekDataState.UNINITIALIZED
+        return WeekDataState.UNINITIALIZED
     raise ValueError(
         f"Invalid WeekDomainState for domain {state.domain_id}: "
         f"starting_condition={state.starting_condition}, condition={state.condition}. "
@@ -59,9 +59,9 @@ def get_week_initialization_state(week: Week) -> str | None:
     """Determine overall initialization state of a week.
 
     Returns:
-        _WeekDataState.INITIALIZED if all domain_states are initialized,
-        _WeekDataState.UNINITIALIZED if all are uninitialized,
-        _WeekDataState.LEGACY if all are legacy,
+        WeekDataState.INITIALIZED if all domain_states are initialized,
+        WeekDataState.UNINITIALIZED if all are uninitialized,
+        WeekDataState.LEGACY if all are legacy,
         None if week has no domain_states,
         raises ValueError if states are mixed.
     """
@@ -287,7 +287,7 @@ class TraectService:
         original_week_init_state = get_week_initialization_state(week)
         # Note: None means empty week (no domain_states), treat as UNINITIALIZED for validation
         week_init_state = (
-            original_week_init_state if original_week_init_state is not None else _WeekDataState.UNINITIALIZED
+            original_week_init_state if original_week_init_state is not None else WeekDataState.UNINITIALIZED
         )
 
         # If states are provided, validate against the expected initialization flow
@@ -302,13 +302,13 @@ class TraectService:
             )
 
             # Check for UNINITIALIZED → INITIALIZED transition: requires starting_condition for ALL
-            if week_init_state == _WeekDataState.UNINITIALIZED:
+            if week_init_state == WeekDataState.UNINITIALIZED:
                 # Validate that all states have starting_condition
                 missing_condition = [state for state in states if state.starting_condition is None]
                 if missing_condition:
                     raise ValidationError("Initial week review requires starting_condition for all active domains")
             # Check for INITIALIZED state: protect starting_condition from change
-            elif week_init_state == _WeekDataState.INITIALIZED:
+            elif week_init_state == WeekDataState.INITIALIZED:
                 state_by_domain_id = {state.domain_id: state for state in week.domain_states}
                 for new_state in states:
                     existing_state = state_by_domain_id.get(new_state.domain_id)

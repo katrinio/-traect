@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from traect.app.service import TraectService, _WeekDataState, get_week_initialization_state
+from traect.app.service import TraectService, WeekDataState, get_week_initialization_state
 from traect.domain.enums import ReviewLifecycle
 
 
@@ -50,7 +50,7 @@ def week_response(week: Any, lifecycle: ReviewLifecycle, is_current_week: bool =
     primary_focus = week.primary_focus_state()
     initialization_state = get_week_initialization_state(week)
     # None (no domain_states) or UNINITIALIZED (both NULL) = uninitialized
-    is_uninitialized = initialization_state is None or initialization_state == _WeekDataState.UNINITIALIZED
+    is_uninitialized = initialization_state is None or initialization_state == WeekDataState.UNINITIALIZED
     return {
         "id": week.id,
         "workspace_id": week.workspace_id,
