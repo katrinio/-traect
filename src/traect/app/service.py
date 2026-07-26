@@ -22,6 +22,14 @@ class _Unset:
 
 UNSET = _Unset()
 
+__all__ = [
+    "TraectService",
+    "WeekDataState",
+    "WeekStateInput",
+    "classify_week_domain_state",
+    "get_week_initialization_state",
+]
+
 
 def _week_bounds(iso_year: int, iso_week: int) -> tuple[date, date]:
     starts_on = date.fromisocalendar(iso_year, iso_week, 1)
