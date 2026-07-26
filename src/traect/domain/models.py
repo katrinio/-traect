@@ -126,14 +126,6 @@ class WeekDomainState(Base):
     week_id: Mapped[int] = mapped_column(ForeignKey("week.id", ondelete="CASCADE"), index=True, init=False)
     domain_id: Mapped[int] = mapped_column(ForeignKey("domain.id", ondelete="CASCADE"), index=True, init=False)
     domain_name: Mapped[str] = mapped_column(String(120))
-    condition: Mapped[DomainCondition] = mapped_column(
-        Enum(
-            DomainCondition,
-            name="domain_condition",
-            native_enum=False,
-            values_callable=_enum_values,
-        )
-    )
     attention: Mapped[DomainAttention] = mapped_column(
         Enum(
             DomainAttention,
@@ -141,6 +133,26 @@ class WeekDomainState(Base):
             native_enum=False,
             values_callable=_enum_values,
         )
+    )
+    condition: Mapped[DomainCondition | None] = mapped_column(
+        Enum(
+            DomainCondition,
+            name="domain_condition",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
+        nullable=True,
+        default=None,
+    )
+    starting_condition: Mapped[DomainCondition | None] = mapped_column(
+        Enum(
+            DomainCondition,
+            name="domain_condition",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
+        nullable=True,
+        default=None,
     )
     minimum_acceptable_level_snapshot: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
