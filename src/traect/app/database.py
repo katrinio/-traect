@@ -4,7 +4,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Column, MetaData, String, Table, create_engine, inspect, text
+from sqlalchemy import Column, MetaData, String, Table, create_engine, inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
@@ -55,7 +55,11 @@ def adopt_legacy_schema(connection: Connection) -> None:
         Column("version_num", String(32), primary_key=True, nullable=False),
     )
     version_table.create(connection, checkfirst=True)
-    connection.execute(version_table.insert().values(version_num=legacy_revision))
+    existing_versions = connection.execute(select(version_table.c.version_num)).scalars().all()
+    if existing_versions:
+        connection.execute(version_table.update().values(version_num=legacy_revision))
+    else:
+        connection.execute(version_table.insert().values(version_num=legacy_revision))
 
 
 def detect_legacy_revision(connection: Connection) -> str | None:
@@ -64,15 +68,21 @@ def detect_legacy_revision(connection: Connection) -> str | None:
     if "alembic_version" in tables:
         versions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
         if versions:
-            if versions == ["0008_minimum_acceptable_level"]:
+            if versions in (
+                ["0008_minimum_acceptable_level"],
+                ["0009_starting_condition_snapshot"],
+            ):
                 return None
+            if len(versions) > 1:
+                raise RuntimeError("database has multiple Traect migration heads; migration cannot continue safely")
+
+    existing_app_tables = tables & APP_TABLES
+    if not existing_app_tables:
+        if "alembic_version" in tables:
             raise RuntimeError(
                 "database uses a Traect migration revision that predates the squashed baseline; "
                 "upgrade it with the previous release before deploying this version"
             )
-
-    existing_app_tables = tables & APP_TABLES
-    if not existing_app_tables:
         return None
     if existing_app_tables != APP_TABLES:
         raise RuntimeError("database contains an incomplete legacy traect schema; migration cannot continue safely")

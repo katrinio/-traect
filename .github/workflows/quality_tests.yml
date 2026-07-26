@@ -14,9 +14,13 @@ jobs:
       options: --user root
       env:
         PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+        PYTHONPATH: ${{ github.workspace }}/src
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install checked-out package
+        run: poetry install --with dev
 
       - name: Run Ruff
         run: poetry run ruff check .
@@ -32,9 +36,13 @@ jobs:
       options: --user root
       env:
         PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+        PYTHONPATH: ${{ github.workspace }}/src
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install checked-out package
+        run: poetry install --with dev
 
       - name: Run tests and coverage
         run: |

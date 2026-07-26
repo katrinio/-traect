@@ -654,6 +654,57 @@ def test_squashed_migration_rejects_a_database_on_the_previous_chain(tmp_path: P
     engine.dispose()
 
 
+def test_starting_condition_migration_updates_existing_0008_database(tmp_path: Path) -> None:
+    database = tmp_path / "existing-0008.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('0008_minimum_acceptable_level')"))
+        connection.execute(
+            text(
+                "CREATE TABLE week_domain_state ("
+                "id INTEGER PRIMARY KEY, "
+                "week_id INTEGER NOT NULL, "
+                "domain_id INTEGER NOT NULL, "
+                "domain_name VARCHAR(120) NOT NULL, "
+                "attention VARCHAR(13) NOT NULL, "
+                "condition VARCHAR(8), "
+                "minimum_acceptable_level_snapshot VARCHAR(500), "
+                "comment TEXT, "
+                "created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+                "updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+
+    migrate_schema(engine)
+
+    with engine.connect() as connection:
+        state_columns = {column["name"] for column in inspect(connection).get_columns("week_domain_state")}
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert "starting_condition" in state_columns
+    assert revision == "0009_starting_condition_snapshot"
+
+
+def test_migrations_adopt_a_supported_schema_with_an_old_revision_marker(tmp_path: Path) -> None:
+    database = tmp_path / "old-marker.db"
+    engine = create_engine(f"sqlite:///{database}", future=True)
+    create_schema(engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+        connection.execute(
+            text("INSERT INTO alembic_version (version_num) VALUES ('0007_historical_week_corrections')")
+        )
+
+    migrate_schema(engine)
+
+    with engine.connect() as connection:
+        revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+    assert revision == "0009_starting_condition_snapshot"
+
+
 @pytest.mark.skip(reason="the historical migration chain was intentionally squashed into the baseline")
 def test_historical_name_migration_backfills_existing_reviews(tmp_path: Path) -> None:
     database = tmp_path / "existing.db"
