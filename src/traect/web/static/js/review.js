@@ -2,7 +2,6 @@ import {
   attentionOptions,
   commentLimit,
   conditionOptions,
-  conditionPresentation,
   escapeHtml,
   selectedNumber,
   summaryOptions,
@@ -11,13 +10,7 @@ import {
 export function renderReview(container, domains, review) {
   if (!container) return;
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
-  container.replaceChildren(
-    ...domains.map((domain) => {
-      const state = statesByDomainId.get(domain.id);
-      const currentState = state || { attention: "paused", starting_condition: null, condition: null, comment: null };
-      return renderEditRow(domain, currentState);
-    })
-  );
+  container.replaceChildren(...domains.map((domain) => renderEditRow(domain, statesByDomainId.get(domain.id))));
   const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
   sacrificedSelect.innerHTML = summaryOptions(domains);
 
@@ -41,15 +34,12 @@ export function collectReviewPayload(domains) {
     sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
     sacrifice_reason: document.querySelector("input[name='sacrifice_reason']").value.trim() || null,
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
-    states: domains.map((domain) => {
-      const startingConditionSelect = document.querySelector(`select[name="starting_condition_${domain.id}"]`);
-      return {
-        domain_id: domain.id,
-        attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
-        starting_condition: startingConditionSelect ? startingConditionSelect.value : null,
-        comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
-      };
-    }),
+    states: domains.map((domain) => ({
+      domain_id: domain.id,
+      attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
+      starting_condition: document.querySelector(`select[name="starting_condition_${domain.id}"]`).value,
+      comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
+    })),
   };
 }
 
@@ -64,37 +54,6 @@ function renderEditRow(domain, currentState) {
     </span>
   ` : "";
   const isInitialized = currentState?.starting_condition !== null && currentState?.starting_condition !== undefined;
-  const isLegacy = !isInitialized && currentState?.condition !== null && currentState?.condition !== undefined;
-
-  let conditionHtml = "";
-  let conditionLabel = isLegacy ? "Recorded condition" : "Condition at start";
-
-  if (isInitialized) {
-    const condition = currentState.starting_condition || "stable";
-    const presentation = conditionPresentation[condition] || conditionPresentation.stable;
-    conditionHtml = `
-      <span class="condition-mark" data-condition="${condition}">
-        <span class="condition-symbol" aria-hidden="true">${presentation.symbol}</span>
-        <span class="condition-label">${presentation.label}</span>
-      </span>
-    `;
-  } else if (isLegacy) {
-    const condition = currentState.condition || "stable";
-    const presentation = conditionPresentation[condition] || conditionPresentation.stable;
-    conditionHtml = `
-      <span class="condition-mark" data-condition="${condition}">
-        <span class="condition-symbol" aria-hidden="true">${presentation.symbol}</span>
-        <span class="condition-label">${presentation.label}</span>
-      </span>
-    `;
-  } else {
-    conditionHtml = `
-      <select name="starting_condition_${domain.id}" ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
-        ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
-      </select>
-    `;
-  }
-
   const row = document.createElement("section");
   row.className = "domain";
   row.innerHTML = `
@@ -102,14 +61,17 @@ function renderEditRow(domain, currentState) {
       <div class="domain-name">${escapeHtml(domain.name)}</div>
     </div>
     <div class="domain-grid">
-      <span class="grid-label">${conditionLabel}</span>
-      <div class="grid-value">${minimumContext}${conditionHtml}</div>
-      <span class="grid-label">Attention this week</span>
-      <div class="grid-value">
+      <label>Attention this week
         <select name="attention_${domain.id}">
           ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
-      </div>
+      </label>
+      <label>Condition at start
+        ${minimumContext}
+        <select name="starting_condition_${domain.id}" ${isInitialized ? "disabled" : ""} ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
+          ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
+        </select>
+      </label>
       <details class="domain-context full" ${comment ? "open" : ""}>
         <summary>${comment ? "Edit context" : "Add context"}</summary>
         <label class="context-field">Context
@@ -127,9 +89,7 @@ function renderEditRow(domain, currentState) {
   const characterCount = row.querySelector(".character-count");
 
   attentionSelect.value = currentState?.attention || "paused";
-  if (startingConditionSelect) {
-    startingConditionSelect.value = currentState?.starting_condition || "stable";
-  }
+  startingConditionSelect.value = currentState?.starting_condition || "stable";
   commentInput.value = comment;
   updateCommentContext(commentInput, commentSummary, characterCount);
 
