@@ -34,12 +34,17 @@ export function collectReviewPayload(domains) {
     sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
     sacrifice_reason: document.querySelector("input[name='sacrifice_reason']").value.trim() || null,
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
-    states: domains.map((domain) => ({
-      domain_id: domain.id,
-      attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
-      starting_condition: document.querySelector(`select[name="starting_condition_${domain.id}"]`).value,
-      comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
-    })),
+    states: domains.map((domain) => {
+      const startingConditionSelect = document.querySelector(`select[name="starting_condition_${domain.id}"]`);
+      const conditionValue = startingConditionSelect ? startingConditionSelect.value : null;
+      return {
+        domain_id: domain.id,
+        attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
+        starting_condition: conditionValue,
+        condition: conditionValue,
+        comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
+      };
+    }),
   };
 }
 
