@@ -1,6 +1,6 @@
 # Code Quality Review: Findings & Enum Reference
 
-Полный каталог качества кода, дубликатов и canonical enum значений из Stage 2.
+Historical review note: каталог качества кода, дубликатов и canonical enum значений из Stage 2. Это snapshot прошлой проверки, а не live-чеклист текущего состояния.
 
 ## Quality Findings матрица
 

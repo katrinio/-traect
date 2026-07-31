@@ -107,7 +107,7 @@ Frontend (focus-history.js: renderFocusHistory)
   
 Browser
   ↓ Render HTML
-  ↓ Click week link → scroll to Timeline, open <details>
+  ↓ Click week link → scroll to the History weekly review, open <details>
 ```
 
 **Key constraints:**
@@ -245,10 +245,15 @@ Python (weekly_audit.py: audit_weekly_data)
   
   [--fix-safe: Apply repairs]
   ↓ Repairable issues:
-    - drop unknown enum values (mark as repaired)
-    - fix invalid dates (mark as repaired)
+    - remove exact duplicate Domain states
+    - normalize known legacy attention/condition values
+    - promote an unambiguous legacy focus into canonical attention
+    - synchronize stale legacy focus fields when the canonical focus is clear
+    - remove structurally identical duplicate Week records without external references
   ↓ Manual review required:
     - missing domain references
+    - unknown enum values
+    - invalid dates or future weeks
     - conflicting focus/states
   ↓ Exit code: 0 (clean) / 1 (manual review) / 2 (rollback)
 ```
@@ -263,18 +268,18 @@ Python (weekly_audit.py: audit_weekly_data)
 saveReview()
   ↓ PUT /weeks/{y}/{w}
   ↓ invalidateHistoryCaches({ includeTimeline: true })
-  ↓ Timeline is cleared (snapshot names changed or new week saved)
+  ↓ History weekly-review cache is cleared (snapshot names changed or new week saved)
   ↓ All three history caches cleared (current Domain metadata might have changed)
 
 refresh() [after domain op]
   ↓ POST /domains/archive or reorder
   ↓ invalidateHistoryCaches({ includeTimeline: false })
-  ↓ Timeline NOT cleared (still uses snapshot names saved in weeks, not current Domain state)
+  ↓ History weekly-review cache is NOT cleared (still uses snapshot names saved in weeks, not current Domain state)
   ↓ History caches cleared (they use current archived_at, name, etc.)
 ```
 
 **Why the difference:**
-- Timeline: snapshot names in week table are immutable; renaming Domain doesn't change saved names
+- History weekly reviews: snapshot names in week table are immutable; renaming Domain doesn't change saved names
 - History: `archived_at` and current `name` from Domain table; both change when you archive or rename
 
 **Comment explains this** (wave-3: `invalidateHistoryCaches()` function in app.js).
