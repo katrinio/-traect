@@ -1,6 +1,6 @@
 # Storage
 
-Проект хранит данные в SQL-базе через SQLAlchemy.
+Проект хранит данные в SQL-базе через SQLAlchemy. Этот документ описывает persisted model и read-side storage semantics. Продуктовый смысл полей описан в [principles](principles.md), полный контракт audit CLI — в [weekly data audit](weekly-data-audit.md).
 
 ## Что хранится
 
@@ -73,9 +73,7 @@ Shares пар и `What gave way` делятся на valid paired weeks. Focus-c
 
 ## Аудит legacy weekly data
 
-On-demand аудит читает сырые табличные значения, поэтому способен сообщить о неизвестных enum и повреждённых ссылках, которые ORM не может безопасно загрузить. Safe repairs отделены от обнаружения и разрешаются только флагом `--fix-safe`; каждая Week ремонтируется в своей транзакции и повторно проверяется перед commit.
-
-Findings не сохраняются в базе и не показываются в Current или Timeline. JSON-отчёт позволяет вынести их во внешнюю диагностику без новой audit metadata schema. Порядок запуска и полный контракт отчёта описаны в [weekly data audit](weekly-data-audit.md).
+On-demand аудит читает сырые табличные значения и не сохраняет findings в базе. Он существует как внешняя диагностика persisted weekly data; порядок запуска, `--fix-safe`, severities, JSON contract и issue codes описаны в [weekly data audit](weekly-data-audit.md).
 
 ## Заметки
 

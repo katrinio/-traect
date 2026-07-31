@@ -15,7 +15,7 @@
 - `Week` хранит один еженедельный обзор.
 - `WeekDomainState` хранит состояние одного `Domain` в одной `Week`.
 
-Пока в интерфейсе эти области могут называться «Spheres», но модель данных остаётся нейтральной, чтобы в будущем поддерживать другие workspace.
+Модель данных остаётся нейтральной, чтобы в будущем поддерживать разные типы workspace.
 
 ## Что отслеживает приложение
 
@@ -49,6 +49,7 @@
 Backend предоставляет небольшой набор HTTP-эндпоинтов:
 
 - `POST /workspaces`
+- `GET /workspaces/current`
 - `GET /workspaces/{workspace_id}`
 - `POST /workspaces/{workspace_id}/domains`
 - `GET /workspaces/{workspace_id}/domains`
@@ -62,7 +63,7 @@ Backend предоставляет небольшой набор HTTP-эндпо
 - `GET /workspaces/{workspace_id}/weeks`
 - `GET /workspaces/{workspace_id}/history/focus?reviewed_weeks=12|26|52|all`
 - `GET /workspaces/{workspace_id}/history/condition?domain_id={domain_id}&reviewed_weeks=12|26|52|all`
-- `GET /workspaces/{workspace_id}/history/trade-offs?reviewed_weeks=12|26|52|all`
+- `GET /workspaces/{workspace_id}/history/trade-offs?reviewed_weeks=12|26|52|all&focus_domain_id={domain_id}&sacrifice_domain_id={domain_id}`
 - `GET /health`
 
 ## Docker deployment
@@ -74,9 +75,11 @@ Backend предоставляет небольшой набор HTTP-эндпо
 После onboarding приложение работает через четыре основных экрана:
 
 - `Current` — компактный обзор текущей ISO-недели только для чтения
-- `Timeline` — журнал сохранённых недельных срезов в обратном хронологическом порядке
-- `Edit review` — редактор еженедельного обзора
+- `History` — журнал сохранённых недельных срезов в обратном хронологическом порядке
+- `Patterns` — аналитические вкладки Focus, Condition и Trade-offs
 - `Domains` — минимальное управление доменами
+
+`Edit review` открывается из `Current` как отдельный редактор текущего provisional review, но не является основной nav-вкладкой.
 
 `Current` отвечает на один вопрос: что происходит прямо сейчас.
 
@@ -96,45 +99,27 @@ Backend предоставляет небольшой набор HTTP-эндпо
 
 Таким образом распределение внимания и фактическое состояние не смешиваются в одном понятии.
 
-## Timeline
+## History
 
-`Timeline` отвечает на вопрос: что происходило в каждую сохранённую неделю.
+`History` отвечает на вопрос: что происходило в каждую сохранённую неделю.
 
 Для каждой недели он показывает сохранённый weekly trade-off, а затем группирует исторические состояния `Domain` по attention и отдельно обозначает condition. Используются имена и состояния, записанные вместе с той неделей: архивные `Domain` остаются видимыми, а новые `Domain` не добавляются в старые обзоры.
 
 Три последние недели раскрыты по умолчанию. Более старые недели остаются компактными и показывают `Main focus` и то, что уступило ему место; полный сохранённый срез раскрывается по заголовку недели.
 
-Timeline — это хронологический операционный журнал, а не аналитика. Он не выводит причинно-следственные связи, не рассчитывает продуктивность и не делает автоматических выводов.
+History — это хронологический операционный журнал, а не аналитика. Он не выводит причинно-следственные связи, не рассчитывает продуктивность и не делает автоматических выводов.
 
-В исторической области Timeline также находится `Focus history`: описательная агрегация того, какой Domain был записан как `Primary focus`. Доступны последние 12, 26 или 52 сохранённых reviews и вся история. Диапазоны считаются по reviews, а не по календарным неделям: отсутствующая неделя не означает записанное бездействие и не попадает в расчёт.
+## Patterns
 
-Знаменатель процентов — все валидные сохранённые reviews выбранного диапазона. Review без Primary focus остаётся в знаменателе и отдельно отражается в `Without Primary focus`; поэтому суммы долей Domain могут быть меньше 100%. Сохранённый provisional review текущей недели включается, несохранённое состояние формы — нет. Архивный Domain остаётся в истории, группировка выполняется по стабильному Domain ID, а показываемое имя берётся из самого свежего focus snapshot в диапазоне.
+`Patterns` содержит аналитические вкладки `Focus`, `Condition` и `Trade-offs`. Это описательные агрегации сохранённых weekly reviews, а не рекомендации, score или оценка качества недели.
 
-Неоднозначные duplicate Week или несколько `primary_focus` в одной неделе исключаются из агрегации и показываются нейтральным integrity-уведомлением. Счётчики не сохраняются: результат каждый раз вычисляется из `WeekDomainState.attention == primary_focus`, поэтому persisted historical correction виден сразу. Равномерное распределение не считается целью; история не выставляет score, не объясняет причины и не рекомендует следующий focus.
-
-Та же историческая панель содержит вкладку `Condition history`. Она показывает выбранный Domain и категориальную последовательность сохранённых `WeekDomainState.condition`: `Stable`, `At risk` и `Critical`. Range control общий с Focus history, Domain выбирается по стабильному ID; активные Domain идут в текущем порядке, а архивные с сохранёнными состояниями остаются доступными.
-
-Condition distribution использует только валидные записанные состояния Domain как знаменатель. Coverage показывается отдельно: `recorded` означает один читаемый state, `absent` — review существует, но Domain отсутствует в snapshot, `excluded` — относящийся к Domain state нельзя безопасно интерпретировать. Отсутствие и исключение не превращаются в Condition. Пустой calendar week не добавляется в sequence.
-
-Transitions и consecutive records связывают только соседние календарные reviews с валидным состоянием выбранного Domain. Отсутствующий review, `absent` или `excluded` разрывает непрерывность. Это описание записанных категорий: приложение не выводит причины, не рассчитывает health score, не сравнивает Condition с minimum acceptable level и не рекомендует будущий focus.
-
-В этой же Domain history показываются `Paused sequences`. Последовательность — это соседние календарные недели с сохранённым review, в которых Domain присутствует в snapshot и явно имеет `WeekDomainState.attention == paused`. Backend показывает текущую последовательность, самую длинную в выбранном диапазоне и все входящие в них недели. Каждая неделя ведёт к исходному historical review.
-
-Пропущенный review, отсутствующий Domain state, `Maintained`, `Primary focus` и исключённый из-за integrity-проблем attention немедленно завершают последовательность. Сохранённый provisional review учитывается, несохранённые изменения формы — нет. Архивирование Domain не меняет записанную историю, а historical correction пересчитывает результат без сохранённых counters. Длина паузы описывает только историю распределения внимания: приложение не оценивает её уместность, не выводит причины и не предлагает реактивацию.
-
-Третья вкладка History — `Trade-off patterns`. Это описательная агрегация Primary focus и `What gave way`, явно сохранённых вместе в weekly review. Канонические источники — единственный `WeekDomainState.attention == primary_focus` и `Week.sacrificed_domain_id`; frontend не восстанавливает пары и не считает доли самостоятельно.
-
-Диапазон 12, 26, 52 или all использует те же последние сохранённые reviews. Summary отдельно сохраняет недели с Primary focus без `What gave way`, недели без focus и исключённые неоднозначные записи. Ranking `What gave way` и ordered pairs используют валидные paired weeks как знаменатель; focus-centric доля использует все валидные недели выбранного Domain как Primary focus, включая `No trade-off`.
-
-Пары группируются по стабильным Domain ID, поэтому `Work → Social` и `Social → Work` различны, а одноимённые Domain не объединяются. Исторические snapshot names и архивные Domain сохраняются; persisted correction сразу пересчитывает результат. Стрелка обозначает только направление чтения `Primary focus → What gave way`: повторное совместное появление не доказывает причинность, не оценивает уместность решения и не предсказывает будущие trade-off. Текст `Why` доступен в исходной неделе, но не анализируется и не агрегируется.
+Детальные правила интерпретации описаны в [принципах проекта](docs/principles.md). То, как агрегации читают persisted history, legacy rows, identity fallback и integrity metadata, описано в [storage](docs/storage.md).
 
 ## Lifecycle weekly review
 
-Сохранённый обзор текущей ISO-недели имеет состояние `Provisional`: это развивающийся snapshot, который можно повторно редактировать до конца недели. При наступлении следующей ISO-недели тот же обзор автоматически становится `Final` и доступен только для чтения. Lifecycle вычисляется по времени и не хранится отдельным изменяемым флагом.
+Сохранённый обзор текущей ISO-недели имеет состояние `Provisional` и может редактироваться. После смены ISO-недели он становится `Final` и доступен только для чтения. Lifecycle вычисляется backend по `TRAECT_TIMEZONE` или `UTC` по умолчанию и не хранится отдельным флагом.
 
-Неделя без сохранённого review остаётся отсутствующей в истории — приложение не создаёт пустые финальные записи. `Provisional` и `Final` описывают только возможность изменения snapshot и ничего не говорят о качестве недели.
-
-Границу недели определяет backend. Сейчас используется timezone из `TRAECT_TIMEZONE`, а при отсутствии настройки — `UTC`. Frontend получает текущую ISO-неделю и lifecycle из API и не использует timezone браузера как источник истины.
+Подробная продуктовая семантика lifecycle описана в [принципах](docs/principles.md), storage-поведение — в [storage](docs/storage.md).
 
 ## Edit review
 
@@ -143,7 +128,7 @@ Transitions и consecutive records связывают только соседн�
 Он содержит:
 
 - `Attention this week` для каждого активного domain
-- `Condition now` для каждого активного domain
+- `Condition at start` для каждого активного domain
 - опциональный контекст domain до 300 символов
 - настроенный для Domain `Minimum acceptable level` как read-only контекст рядом с Condition
 - один `Main focus`
@@ -151,42 +136,28 @@ Transitions и consecutive records связывают только соседн�
 - заметки недели
 - действие сохранения
 
-`Main focus` не хранится отдельным полем. Единственный источник истины — `WeekDomainState.attention == primary_focus`; Current, Timeline и API получают Main focus из этого состояния. В неделе может быть ноль или один такой Domain. Без него нельзя указать `What gave way`, а выбранные Domain должны различаться.
+`Main focus` не хранится отдельным полем. Единственный источник истины — `WeekDomainState.attention == primary_focus`; Current, History и API получают Main focus из этого состояния. В неделе может быть ноль или один такой Domain. Без него нельзя указать `What gave way`, а выбранные Domain должны различаться.
 
 ## Единый словарь данных
 
-`Attention` описывает, сколько внимания Domain фактически получил за неделю: `Primary focus`, `Maintained` или `Paused`.
-
-`Condition` описывает наблюдаемое состояние Domain: `Stable`, `At risk` или `Critical`.
-
-Измерения независимы: `Paused` не является отрицательной оценкой, а `Stable` не означает активных вложений. В базе данных, Python-модели, API и frontend используются одни поля `attention` и `condition` и значения `primary_focus`, `maintained`, `paused`, `stable`, `at_risk`, `critical`. Прежняя терминология больше не является частью рабочего контракта.
+Канонические поля weekly state — `attention` и `condition`. Их значения и продуктовый смысл описаны в [принципах проекта](docs/principles.md), а соответствие базе/API/frontend — в [storage](docs/storage.md).
 
 ## Minimum acceptable level
 
-`minimum_acceptable_level` — необязательное описание того, что для конкретного Domain всё ещё считается приемлемым. Оно может быть качественным или измеримым и помогает пользователю самостоятельно выбрать Condition.
+`minimum_acceptable_level` — необязательное описание приемлемого состояния конкретного `Domain`. Оно показывается как read-only контекст в weekly review и помогает пользователю выбрать `Condition`, но приложение не оценивает его автоматически.
 
-Например:
-
-- Health: «Базовая забота о здоровье остаётся управляемой, важные визиты не теряются»;
-- Home: «Дом остаётся пригодным для повседневной жизни»;
-- Social: «Есть хотя бы один содержательный контакт за неделю».
-
-Приложение не оценивает выполнение этого описания, не вычисляет из него Condition и не превращает его в score, habit target или задачу. Поле настраивается на экране Domains и не требуется в onboarding.
-
-При сохранении provisional review актуальный текст копируется в `WeekDomainState.minimum_acceptable_level_snapshot`. Повторный Save той же provisional недели обновляет snapshot из текущей Domain-конфигурации. Final review сохраняет последний записанный контекст; последующие изменения Domain его не переписывают. Legacy-недели могут иметь `null`, который не заполняется сегодняшним значением.
+Продуктовый смысл описан в [принципах](docs/principles.md), snapshot-поведение — в [storage](docs/storage.md).
 
 ## Аудит исторических недель
 
-Исторические weekly review можно проверить отдельной read-only командой:
+Исторические weekly review можно проверить отдельной командой:
 
 ```text
 poetry run traect audit weekly-data
 poetry run traect audit weekly-data --format json
 ```
 
-Dry-run используется по умолчанию и ничего не меняет. Только `--fix-safe` применяет однозначные repairs транзакционно по одной Week; неоднозначная история остаётся без изменений и получает стабильный issue code для ручной проверки. Архивные Domain считаются валидной частью истории, неизвестные значения не угадываются.
-
-Перед `--fix-safe` нужно создать и проверить backup. Полный порядок, scope-флаги, severities и справочник issue codes описаны в [руководстве по weekly data audit](docs/weekly-data-audit.md).
+Dry-run используется по умолчанию. Полный порядок запуска, backup перед `--fix-safe`, scope-флаги, safe repairs, severities и issue codes описаны в [weekly data audit](docs/weekly-data-audit.md).
 
 ## Настройка Workspace
 

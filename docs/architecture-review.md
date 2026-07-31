@@ -1,6 +1,6 @@
 # -traect: Архитектура и консистентность
 
-Полный обзор слоёв, API контрактов, ошибок и найденных несоответствий после Stage 1–3 review.
+Historical review note: обзор слоёв, API контрактов, ошибок и найденных несоответствий после Stage 1–3 review. Текущие live-инструкции находятся в `README.md`, `development.md`, `storage.md` и `weekly-data-audit.md`.
 
 ## 1. Архитектура системы
 
@@ -44,7 +44,7 @@ Database (SQLite + raw SQL)
 |----------|--------------|---------------|-------|-----------|---------------|
 | GET .../history/focus | reviewed_weeks? | focus_payload | zero-summary | 400 | ✓ ignored |
 | GET .../history/condition | reviewed_weeks?, domain_id? | condition_payload | zero-summary, history:null | 400 | ✓ ignored |
-| GET .../history/trade-offs | reviewed_weeks?, focus_id?, sac_id? | tradeoff_payload | zero-summary | 400 | ⚠️ 400 strict |
+| GET .../history/trade-offs | reviewed_weeks?, focus_domain_id?, sacrifice_domain_id? | tradeoff_payload | zero-summary | 400 | ⚠️ 400 strict |
 
 **⚠️ C-3 (Product decision):** trade-offs отвергает неизвестные параметры, focus/condition игнорируют.  
 **Рекомендация:** uniform tolerant policy для всех трёх.
