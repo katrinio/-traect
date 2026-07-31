@@ -21,7 +21,7 @@ from tests.support import wsgi_request as _request
 from traect.api.app import build_app, server_address_from_environment
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
-from traect.app.service import TraectService, WeekStateInput
+from traect.app.service import TraectService, WeekStateInput, get_week_initialization_state
 from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Week, WeekDomainState
 
@@ -1033,7 +1033,7 @@ def test_invalid_week_values_return_json_error(tmp_path: Path) -> None:
     ],
 )
 def test_canonical_week_state_values_round_trip(tmp_path: Path, attention: str, condition: str) -> None:
-    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}", clock=lambda: week_clock(2026, 30))
     _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
     body = (
         b"{"
@@ -1605,11 +1605,9 @@ def test_week_detects_mixed_state_consistency_error(session: Session) -> None:
     health_state.condition = DomainCondition.CRITICAL  # Now it's legacy
     session.flush()
 
-    # Try to read it - should fail with mixed state error
-    # TODO: wtf
-    # fresh_week = session.execute(select(Week).where(Week.id == week.id)).scalar_one()
-    # with pytest.raises(ValueError, match="mixed domain state types"):
-    #     get_week_initialization_state(fresh_week)
+    fresh_week = session.execute(select(Week).where(Week.id == week.id)).scalar_one()
+    with pytest.raises(ValueError, match="mixed domain state types"):
+        get_week_initialization_state(fresh_week)
 
 
 def test_week_rejects_empty_states_on_existing_week(session: Session) -> None:
