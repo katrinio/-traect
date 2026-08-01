@@ -36,10 +36,11 @@ export function collectReviewPayload(domains) {
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
     states: domains.map((domain) => {
       const startingConditionSelect = document.querySelector(`select[name="starting_condition_${domain.id}"]`);
+      const conditionValue = startingConditionSelect ? startingConditionSelect.value : null;
       return {
         domain_id: domain.id,
         attention: document.querySelector(`select[name="attention_${domain.id}"]`).value,
-        starting_condition: startingConditionSelect ? startingConditionSelect.value : null,
+        condition: conditionValue,
         comment: document.querySelector(`textarea[name="comment_${domain.id}"]`).value.trim() || null,
       };
     }),
