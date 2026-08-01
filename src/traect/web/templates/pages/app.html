@@ -22,12 +22,35 @@
         </div>
       </header>
 
-      <nav aria-label="Sections" id="main-nav">
-        <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
-        <button class="tab" type="button" data-view="history" aria-selected="false">History</button>
-        <button class="tab" type="button" data-view="patterns" aria-selected="false">Patterns</button>
-        <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
-      </nav>
+      <div class="app-navigation" id="main-nav">
+        <nav aria-label="Sections">
+          <button class="tab" type="button" data-view="current" aria-selected="true">Current</button>
+          <button class="tab" type="button" data-view="history" aria-selected="false">History</button>
+          <button class="tab" type="button" data-view="patterns" aria-selected="false">Patterns</button>
+          <button class="tab" type="button" data-view="domains" aria-selected="false">Domains</button>
+        </nav>
+        <button class="reset-history-trigger" type="button" id="reset-history">
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path d="M4.2 5.1A5 5 0 1 1 3 8.4" />
+            <path d="M4.2 2.8v2.3h2.3" />
+          </svg>
+          <span>Reset history</span>
+        </button>
+      </div>
+
+      <dialog class="confirm-dialog" id="reset-history-dialog" aria-labelledby="reset-history-title">
+        <form method="dialog">
+          <h2 class="section-title" id="reset-history-title">Reset review history?</h2>
+          <div class="confirm-dialog-copy">
+            <p>This will permanently remove all recorded weekly reviews, timelines and patterns.</p>
+            <p>Your domains and their configuration will remain unchanged.</p>
+          </div>
+          <div class="actions">
+            <button class="secondary" type="button" id="cancel-reset-history" autofocus>Cancel</button>
+            <button class="reset-history-confirm" type="button" id="confirm-reset-history">Reset history</button>
+          </div>
+        </form>
+      </dialog>
 
       <main>
         <section id="current-view">

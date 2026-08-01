@@ -559,6 +559,46 @@ def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> No
     assert '"name": "Life"' in current_workspace["body"]
 
 
+def test_reset_history_clears_weeks_without_touching_domains(tmp_path: Path) -> None:
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    _request(
+        app,
+        "POST",
+        "/workspaces",
+        body=(
+            b'{"name":"Life","domains":['
+            b'{"name":"Work","minimum_acceptable_level":"Ship the committed work."},'
+            b'{"name":"Health","minimum_acceptable_level":"Keep care visible."}]}'
+        ),
+    )
+    _request(app, "PUT", "/workspaces/1/domains/order", body=b'{"domain_ids":[2,1]}')
+    saved = _request(
+        app,
+        "PUT",
+        "/workspaces/1/weeks/2026/31",
+        body=(
+            b'{"notes":"Observed week","states":['
+            b'{"domain_id":1,"attention":"primary_focus","starting_condition":"stable"},'
+            b'{"domain_id":2,"attention":"maintained","starting_condition":"at_risk"}]}'
+        ),
+    )
+    assert saved["status"].startswith("200")
+
+    response = _request(app, "POST", "/workspaces/1/history/reset")
+    domains = json.loads(_request(app, "GET", "/workspaces/1/domains")["body"])["items"]
+    weeks = json.loads(_request(app, "GET", "/workspaces/1/weeks")["body"])["items"]
+
+    assert response["status"].startswith("200")
+    assert json.loads(response["body"]) == {"deleted_weeks": 1}
+    assert weeks == []
+    assert [(domain["name"], domain["sort_order"]) for domain in domains] == [("Health", 0), ("Work", 1)]
+    assert domains[0]["minimum_acceptable_level"] == "Keep care visible."
+    assert domains[1]["minimum_acceptable_level"] == "Ship the committed work."
+
+    get_response = _request(app, "GET", "/workspaces/1/history/reset")
+    assert get_response["status"].startswith("404")
+
+
 def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) -> None:
     app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
     _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')

@@ -219,6 +219,45 @@ def test_domain_minimum_level_can_be_saved_and_cleared(page: Page, live_app: Liv
 
 
 @pytest.mark.browser
+def test_reset_history_requires_confirmation_and_preserves_domain_configuration(
+    page: Page,
+    live_app: LiveApp,
+) -> None:
+    workspace_id, domains = seed_workspace(live_app, ["Work", "Health"])
+    set_minimum_acceptable_level(live_app, domains["Work"], "Ship committed work.")
+    save_current_review(live_app, workspace_id, domains, focus="Work")
+
+    page.goto(live_app)
+    reset = page.get_by_role("button", name="Reset history")
+    expect(reset).to_be_visible()
+    reset.click()
+    dialog = page.get_by_role("dialog", name="Reset review history?")
+    expect(dialog).to_be_visible()
+    expect(page.get_by_role("button", name="Cancel")).to_be_focused()
+    page.get_by_role("button", name="Cancel").click()
+    expect(dialog).to_be_hidden()
+    assert request_json(live_app, "GET", "/workspaces/1/weeks")["items"]
+
+    reset.click()
+    dialog.get_by_role("button", name="Reset history").click()
+    expect(dialog).to_be_hidden()
+    expect(page.get_by_role("button", name="Start review")).to_be_visible()
+    expect(page.locator("#current-tradeoff")).to_be_hidden()
+    assert request_json(live_app, "GET", "/workspaces/1/weeks")["items"] == []
+
+    page.get_by_role("button", name="Domains").click()
+    minimum = page.get_by_role("textbox", name="Minimum acceptable level").first
+    expect(minimum).to_have_value("Ship committed work.")
+    saved_domains = request_json(live_app, "GET", "/workspaces/1/domains")["items"]
+    assert [domain["name"] for domain in saved_domains] == ["Work", "Health"]
+
+    page.get_by_role("button", name="History").click()
+    expect(page.get_by_text("No weekly reviews yet.", exact=True)).to_be_visible()
+    page.get_by_role("button", name="Patterns").click()
+    expect(page.get_by_text("No focus history yet.", exact=True)).to_be_visible()
+
+
+@pytest.mark.browser
 def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, live_app: LiveApp) -> None:
     _, domains = seed_workspace(live_app, ["Health", "Work"])
     set_minimum_acceptable_level(live_app, domains["Health"], "Keep essential care manageable.")
