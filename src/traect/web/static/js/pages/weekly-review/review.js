@@ -3,41 +3,29 @@ import {
   commentLimit,
   conditionOptions,
   escapeHtml,
-  selectedNumber,
-  summaryOptions,
 } from "/js/shared/dom.js";
 
 let activeMinimumLevelPopover = null;
 let minimumLevelDocumentListenersBound = false;
 const canHoverMinimumLevel = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+let preservedTradeoff = { sacrificedDomainId: null, sacrificeReason: null };
 
 export function renderReview(container, domains, review) {
   if (!container) return;
   closeMinimumLevelPopover();
+  preservedTradeoff = {
+    sacrificedDomainId: review?.sacrificed_domain_id ?? null,
+    sacrificeReason: review?.sacrifice_reason ?? null,
+  };
   const statesByDomainId = new Map((review?.states || []).map((item) => [item.domain_id, item]));
   container.replaceChildren(...domains.map((domain) => renderEditRow(domain, statesByDomainId.get(domain.id))));
-  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
-  sacrificedSelect.innerHTML = summaryOptions(domains);
-
-  const focusedDomains = domains.filter(
-    (domain) => statesByDomainId.get(domain.id)?.attention === "primary_focus",
-  );
-  const primaryFocusId = focusedDomains.length === 1 ? focusedDomains[0].id : null;
-  sacrificedSelect.value = review?.sacrificed_domain_id ? String(review.sacrificed_domain_id) : "";
-  document.querySelector("input[name='sacrifice_reason']").value = review?.sacrifice_reason || "";
-  updateTradeOffControls(primaryFocusId);
-
-  sacrificedSelect.onchange = () => {
-    if (sacrificedSelect.value === String(selectedPrimaryFocusId())) sacrificedSelect.value = "";
-    synchronizeTradeOffReason();
-  };
   document.querySelector("textarea[name='notes']").value = review?.notes || "";
 }
 
 export function collectReviewPayload(domains) {
   return {
-    sacrificed_domain_id: selectedNumber("sacrificed_domain_id"),
-    sacrifice_reason: document.querySelector("input[name='sacrifice_reason']").value.trim() || null,
+    sacrificed_domain_id: preservedTradeoff.sacrificedDomainId,
+    sacrifice_reason: preservedTradeoff.sacrificeReason,
     notes: document.querySelector("textarea[name='notes']").value.trim() || null,
     states: domains.map((domain) => {
       const startingConditionSelect = document.querySelector(`select[name="starting_condition_${domain.id}"]`);
@@ -115,8 +103,6 @@ function renderEditRow(domain, currentState) {
   attentionSelect.addEventListener("change", () => {
     if (attentionSelect.value === "primary_focus") {
       enforceSinglePrimaryFocus(domain.id);
-    } else {
-      updateTradeOffControls(selectedPrimaryFocusId());
     }
   });
   commentInput.addEventListener("input", () => updateCommentContext(commentInput, commentSummary, characterCount));
@@ -194,35 +180,6 @@ function enforceSinglePrimaryFocus(primaryFocusId) {
     if (domainId === primaryFocusId) select.value = "primary_focus";
     else if (select.value === "primary_focus") select.value = "maintained";
   });
-  updateTradeOffControls(primaryFocusId);
-}
-
-function selectedPrimaryFocusId() {
-  const selected = [...document.querySelectorAll("select[name^='attention_']")]
-    .find((select) => select.value === "primary_focus");
-  return selected ? Number(selected.name.replace("attention_", "")) : null;
-}
-
-function updateTradeOffControls(primaryFocusId) {
-  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
-  sacrificedSelect.disabled = primaryFocusId === null;
-  sacrificedSelect.querySelector("option[value='']").textContent = primaryFocusId === null
-    ? "Choose a main focus first"
-    : "None this week";
-  sacrificedSelect.querySelectorAll("option").forEach((option) => {
-    option.disabled = option.value === String(primaryFocusId);
-  });
-  if (primaryFocusId === null || sacrificedSelect.value === String(primaryFocusId)) sacrificedSelect.value = "";
-  synchronizeTradeOffReason();
-}
-
-function synchronizeTradeOffReason() {
-  const sacrificedSelect = document.querySelector("select[name='sacrificed_domain_id']");
-  const reasonInput = document.querySelector("input[name='sacrifice_reason']");
-  const hasSacrifice = Boolean(sacrificedSelect.value);
-  reasonInput.disabled = !hasSacrifice;
-  reasonInput.placeholder = hasSacrifice ? "What caused this trade-off?" : "Choose what gave way first";
-  if (!hasSacrifice) reasonInput.value = "";
 }
 
 function updateCommentContext(input, summary, counter) {

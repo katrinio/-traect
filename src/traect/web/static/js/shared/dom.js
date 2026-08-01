@@ -17,25 +17,12 @@ export function activeDomains(domains) {
   return domains.filter((domain) => domain.archived_at === null).sort(bySortOrder);
 }
 
-export function summaryOptions(domains) {
-  const options = ['<option value="">None this week</option>'];
-  for (const domain of domains) {
-    options.push(`<option value="${domain.id}">${escapeHtml(domain.name)}</option>`);
-  }
-  return options.join("");
-}
-
 export function attentionOptions() {
   return Object.entries(attentionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
 }
 
 export function conditionOptions() {
   return Object.entries(conditionPresentation).map(([value, item]) => [value, `${item.symbol} ${item.label}`]);
-}
-
-export function selectedNumber(name) {
-  const value = document.querySelector(`select[name='${name}']`).value;
-  return value ? Number(value) : null;
 }
 
 export function hasDuplicateNames(names) {

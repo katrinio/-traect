@@ -180,15 +180,19 @@ def test_onboarding_to_weekly_review(page: Page, live_app: LiveApp) -> None:
 
     page.get_by_role("button", name="Start review").click()
     expect(page.get_by_text("This review remains provisional until the week ends.", exact=False)).to_be_visible()
-    what_gave_way = page.locator("select[name='sacrificed_domain_id']")
-    expect(what_gave_way).to_be_disabled()
+    expect(page.get_by_role("heading", name="Weekly notes")).to_be_visible()
+    expect(page.get_by_text("Weekly trade-off", exact=True)).to_have_count(0)
+    expect(page.get_by_text("What gave way", exact=True)).to_have_count(0)
+    expect(page.get_by_text("Why", exact=True)).to_have_count(0)
+    page.get_by_label("Week notes").fill("Simple weekly journal entry.")
     page.locator("select[name^='attention_']").first.select_option("primary_focus")
-    expect(what_gave_way).to_be_enabled()
     page.get_by_role("button", name="Save").click()
 
     expect(current_groups.get_by_role("heading", name="Primary focus")).to_be_visible()
     expect(current_groups.get_by_text("Work", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="Timeline")).to_be_visible()
+    current = request_json(live_app, "GET", "/workspaces/current")
+    assert current["current_week"]["review"]["notes"] == "Simple weekly journal entry."
     assert page_errors == []
 
 
@@ -256,7 +260,7 @@ def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, 
     expect(work_popover).to_be_hidden()
 
     health_trigger.click()
-    page.get_by_text("Weekly trade-off", exact=True).click()
+    page.get_by_text("Weekly notes", exact=True).click()
     expect(health_popover).to_be_hidden()
 
     health_trigger.click()
