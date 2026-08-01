@@ -72,6 +72,10 @@ const el = {
   editReviewButton: document.getElementById("edit-review"),
   setupPendingIndicator: document.getElementById("setup-pending-indicator"),
   backToCurrentButton: document.getElementById("back-to-current"),
+  resetHistoryButton: document.getElementById("reset-history"),
+  resetHistoryDialog: document.getElementById("reset-history-dialog"),
+  cancelResetHistoryButton: document.getElementById("cancel-reset-history"),
+  confirmResetHistoryButton: document.getElementById("confirm-reset-history"),
 };
 
 document.querySelectorAll("[data-view]").forEach((button) => {
@@ -115,6 +119,12 @@ el.conditionHistoryDomain?.addEventListener("change", () => {
 
 el.editReviewButton?.addEventListener("click", () => setActiveView("edit"));
 el.backToCurrentButton?.addEventListener("click", () => setActiveView("current"));
+el.resetHistoryButton?.addEventListener("click", openResetHistoryDialog);
+el.cancelResetHistoryButton?.addEventListener("click", closeResetHistoryDialog);
+el.confirmResetHistoryButton?.addEventListener("click", resetHistory);
+el.resetHistoryDialog?.addEventListener("click", (event) => {
+  if (event.target === el.resetHistoryDialog) closeResetHistoryDialog();
+});
 
 boot().catch((error) => setStatus(el.setupStatus || el.reviewStatus || el.manageStatus, error.message, true));
 
@@ -218,6 +228,16 @@ function showOnly(view) {
   el.patternsView?.classList.toggle("hidden", view !== "patterns");
   el.editView?.classList.toggle("hidden", view !== "edit");
   el.manageView?.classList.toggle("hidden", view !== "domains");
+}
+
+function openResetHistoryDialog() {
+  if (!el.resetHistoryDialog) return;
+  el.resetHistoryDialog.showModal();
+  el.cancelResetHistoryButton?.focus();
+}
+
+function closeResetHistoryDialog() {
+  el.resetHistoryDialog?.close();
 }
 
 function setActiveView(view) {
@@ -424,6 +444,30 @@ function invalidateHistoryCaches({ includeTimeline }) {
   state.focusHistory = { ...state.focusHistory, data: null, error: null };
   state.conditionHistory = { ...state.conditionHistory, data: null, error: null };
   state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
+}
+
+function resetHistoryCaches() {
+  state.timeline = { items: null, loading: false, error: null };
+  state.focusHistory = { ...state.focusHistory, data: null, error: null };
+  state.conditionHistory = { ...state.conditionHistory, data: null, error: null, domainId: null };
+  state.tradeoffHistory = { ...state.tradeoffHistory, data: null, error: null };
+}
+
+async function resetHistory() {
+  if (!state.workspace) return;
+  el.confirmResetHistoryButton.disabled = true;
+  try {
+    await fetchJSON(`/workspaces/${state.workspace.id}/history/reset`, { method: "POST" });
+    closeResetHistoryDialog();
+    await loadState();
+    resetHistoryCaches();
+    state.activeView = "current";
+    render();
+  } catch (error) {
+    setStatus(el.reviewStatus || el.manageStatus, error.message || "Review history could not be reset.", true);
+  } finally {
+    el.confirmResetHistoryButton.disabled = false;
+  }
 }
 
 async function saveReview() {

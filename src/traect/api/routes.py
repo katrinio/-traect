@@ -43,6 +43,8 @@ def dispatch(
         return workspace_response(service.get_current_workspace())
     if method == "GET" and len(parts) == 2 and parts[0] == "workspaces":
         return workspace_response(service.get_workspace(int(parts[1])))
+    if method == "POST" and len(parts) == 4 and parts[0] == "workspaces" and parts[2:] == ["history", "reset"]:
+        return {"deleted_weeks": service.reset_review_history(int(parts[1]))}
     if method == "POST" and len(parts) == 3 and parts[0] == "workspaces" and parts[2] == "domains":
         return domain_response(
             service.create_domain(

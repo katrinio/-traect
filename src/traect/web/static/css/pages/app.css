@@ -13,10 +13,88 @@ header {
   border-bottom: 1px solid var(--border);
 }
 
-nav {
+.app-navigation {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
+  justify-content: space-between;
   margin: 0 0 var(--space-4);
+}
+
+.app-navigation nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reset-history-trigger {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2.25rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: #6f8391;
+  cursor: pointer;
+  padding: 0.45rem 0.15rem;
+}
+
+.reset-history-trigger:hover {
+  color: var(--text);
+}
+
+.reset-history-trigger svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.reset-history-trigger path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.confirm-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: var(--space-4);
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 18%);
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 22%);
+}
+
+.confirm-dialog form,
+.confirm-dialog-copy {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.confirm-dialog-copy p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.reset-history-confirm {
+  min-height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: #6f8391;
+  cursor: pointer;
+  padding: 0.85rem 1.2rem;
+}
+
+.reset-history-confirm:hover {
+  color: var(--text);
 }
 
 main {

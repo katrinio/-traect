@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from traect.app.errors import ConflictError, NotFoundError, ValidationError
@@ -279,6 +279,16 @@ class TraectService:
         self.session.flush()
         logger.info("Domain restored: domain_id=%s workspace_id=%s", domain.id, domain.workspace_id)
         return domain
+
+    def reset_review_history(self, workspace_id: int) -> int:
+        workspace = self.get_workspace(workspace_id)
+        week_ids = select(Week.id).where(Week.workspace_id == workspace.id)
+        self.session.execute(delete(WeekDomainState).where(WeekDomainState.week_id.in_(week_ids)))
+        result = self.session.execute(delete(Week).where(Week.workspace_id == workspace.id))
+        deleted = int(getattr(result, "rowcount", 0) or 0)
+        self.session.flush()
+        logger.info("Review history reset: workspace_id=%s weeks_deleted=%s", workspace.id, deleted)
+        return deleted
 
     def upsert_week(
         self,
