@@ -866,18 +866,39 @@ section {
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: var(--text-muted);
+  color: #a94f4f;
   cursor: pointer;
-  font-size: 0.88rem;
   line-height: 1;
-  opacity: 0.72;
+  opacity: 0.68;
   padding: 0;
 }
 
 .minimum-level-trigger:hover,
+.minimum-level-trigger:focus-visible,
 .minimum-level-trigger.is-open {
   background: var(--surface);
+  color: #c93636;
   opacity: 1;
+}
+
+.minimum-level-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  display: block;
+}
+
+.minimum-level-icon-pole,
+.minimum-level-icon-flag {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.minimum-level-icon-flag {
+  fill: currentColor;
+  stroke-width: 1.35;
 }
 
 .minimum-level-popover {
@@ -897,6 +918,10 @@ section {
   font-size: 0.86rem;
   font-weight: 400;
   line-height: 1.45;
+}
+
+.minimum-level-popover[hidden] {
+  display: none;
 }
 
 .minimum-level-title {
