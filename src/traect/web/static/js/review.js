@@ -65,19 +65,19 @@ function renderEditRow(domain, currentState) {
       <div class="domain-name">${escapeHtml(domain.name)}</div>
     </div>
     <div class="domain-grid">
-      <label>Attention this week
+      <label>Attention
         <select name="attention_${domain.id}">
           ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
-      <label>Condition at start
+      <label>Current state
         ${minimumContext}
         <select name="starting_condition_${domain.id}" ${isInitialized ? "disabled" : ""} ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
           ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <details class="domain-context full" ${comment ? "open" : ""}>
-        <summary>${comment ? "Edit context" : "Add context"}</summary>
+        <summary>${comment ? "Edit context" : "Notes"}</summary>
         <label class="context-field">Context
           <textarea name="comment_${domain.id}" maxlength="${commentLimit}"
             placeholder="What explains this attention choice or condition?"></textarea>
@@ -147,6 +147,6 @@ function synchronizeTradeOffReason() {
 
 function updateCommentContext(input, summary, counter) {
   const length = input.value.length;
-  summary.textContent = length > 0 ? "Edit context" : "Add context";
+  summary.textContent = length > 0 ? "Edit context" : "Notes";
   counter.textContent = `${length} / ${commentLimit}`;
 }
