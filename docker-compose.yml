@@ -2,6 +2,11 @@ services:
   traect:
     image: ghcr.io/katrinio/traect:latest
     container_name: traect
+
+    labels:
+      com.katrin.logs.app: "traect"
+      com.katrin.logs.environment: "production"
+
     restart: unless-stopped
     ports:
       - "127.0.0.1:8012:8000"
