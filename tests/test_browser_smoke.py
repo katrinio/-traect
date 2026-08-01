@@ -218,27 +218,53 @@ def test_domain_minimum_level_can_be_saved_and_cleared(page: Page, live_app: Liv
 def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, live_app: LiveApp) -> None:
     _, domains = seed_workspace(live_app, ["Health", "Work"])
     set_minimum_acceptable_level(live_app, domains["Health"], "Keep essential care manageable.")
+    set_minimum_acceptable_level(live_app, domains["Work"], "Close tasks on time without accumulating backlog.")
 
     page.goto(live_app)
     page.get_by_role("button", name="Start review").click()
 
     health = page.locator("#review-domains .domain").filter(has_text="Health")
     work = page.locator("#review-domains .domain").filter(has_text="Work")
-    trigger = health.get_by_role("button", name="Show minimum acceptable level for Health")
-    popover = page.locator(f"#minimum-level-context-{domains['Health']}")
-    expect(trigger).to_be_visible()
-    expect(trigger).to_have_attribute("aria-expanded", "false")
-    expect(popover).to_be_hidden()
+    health_trigger = health.get_by_role("button", name="Show minimum acceptable level for Health")
+    work_trigger = work.get_by_role("button", name="Show minimum acceptable level for Work")
+    health_popover = page.locator(f"#minimum-level-context-{domains['Health']}")
+    work_popover = page.locator(f"#minimum-level-context-{domains['Work']}")
+    expect(health_trigger).to_be_visible()
+    expect(health_trigger.locator("svg")).to_have_count(1)
+    expect(health_trigger).not_to_contain_text("🚩")
+    expect(health_trigger).to_have_attribute("aria-expanded", "false")
+    expect(work_trigger).to_have_attribute("aria-expanded", "false")
+    expect(health_popover).to_be_hidden()
+    expect(work_popover).to_be_hidden()
 
-    trigger.click()
-    expect(trigger).to_have_attribute("aria-expanded", "true")
-    expect(popover.get_by_text("Minimum acceptable level", exact=True)).to_be_visible()
-    expect(popover.get_by_text("Keep essential care manageable.", exact=True)).to_be_visible()
-    trigger.click()
-    expect(popover).to_be_hidden()
+    health_trigger.click()
+    expect(health_trigger).to_have_attribute("aria-expanded", "true")
+    expect(work_trigger).to_have_attribute("aria-expanded", "false")
+    expect(health_popover.get_by_text("Minimum acceptable level", exact=True)).to_be_visible()
+    expect(health_popover).to_contain_text("Keep essential care manageable.")
+    expect(health_popover).not_to_contain_text("🚩")
+    expect(work_popover).to_be_hidden()
+
+    work_trigger.click()
+    expect(health_trigger).to_have_attribute("aria-expanded", "false")
+    expect(work_trigger).to_have_attribute("aria-expanded", "true")
+    expect(health_popover).to_be_hidden()
+    expect(work_popover).to_contain_text("Close tasks on time without accumulating backlog.")
+
+    work_trigger.click()
+    expect(work_trigger).to_have_attribute("aria-expanded", "false")
+    expect(work_popover).to_be_hidden()
+
+    health_trigger.click()
+    page.get_by_text("Weekly trade-off", exact=True).click()
+    expect(health_popover).to_be_hidden()
+
+    health_trigger.click()
+    page.keyboard.press("Escape")
+    expect(health_trigger).to_have_attribute("aria-expanded", "false")
+    expect(health_popover).to_be_hidden()
 
     assert health.get_by_role("combobox", name="Current state").get_attribute("aria-describedby") is None
-    expect(work.locator(".minimum-level-context")).to_have_count(0)
     expect(page.locator("#current-view .minimum-level-context")).to_have_count(0)
 
 
