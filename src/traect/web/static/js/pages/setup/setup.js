@@ -1,4 +1,4 @@
-import { escapeHtml } from "/js/presentation.js";
+import { escapeHtml } from "/js/shared/dom.js";
 
 export function renderSetup(container, draft, callbacks) {
   if (!container) return;

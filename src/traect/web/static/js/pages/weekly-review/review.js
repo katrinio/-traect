@@ -5,7 +5,7 @@ import {
   escapeHtml,
   selectedNumber,
   summaryOptions,
-} from "/js/presentation.js";
+} from "/js/shared/dom.js";
 
 export function renderReview(container, domains, review) {
   if (!container) return;

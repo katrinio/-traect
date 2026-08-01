@@ -237,7 +237,7 @@ def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, 
     trigger.click()
     expect(popover).to_be_hidden()
 
-    expect(health.get_by_role("combobox", name="Current state")).not_to_have_attribute("aria-describedby")
+    assert health.get_by_role("combobox", name="Current state").get_attribute("aria-describedby") is None
     expect(work.locator(".minimum-level-context")).to_have_count(0)
     expect(page.locator("#current-view .minimum-level-context")).to_have_count(0)
 

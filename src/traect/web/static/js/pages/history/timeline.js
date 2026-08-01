@@ -1,5 +1,5 @@
-import { attentionPresentation, conditionPresentation, escapeHtml, formatWeekLabel, setStatus } from "/js/presentation.js";
-import { createTradeOffSummary } from "/js/tradeoff.js";
+import { attentionPresentation, conditionPresentation, escapeHtml, formatWeekLabel, setStatus } from "/js/shared/dom.js";
+import { createTradeOffSummary } from "/js/shared/tradeoff.js";
 
 export function mapTimelineHistory(payload) {
   if (!payload || !Array.isArray(payload.items)) throw new Error("Timeline response is incomplete.");

@@ -21,7 +21,7 @@ Historical review note: каталог качества кода, дублика
 | Q-11 | API: unknown-query inconsistent (trade-offs vs focus/condition) | API | Low | High | Pending | **Product decision needed** |
 | Q-12 | Py: _normalize_domain_name for workspace | Naming | Low | High | Skipped | Rename to `_normalize_name` (cosmetic) |
 | Q-13 | Tests: builder types `dict[str, object]` | Typing | Low | High | Skipped | Fix to `Any` if mypy expands |
-| Q-14 | formatPercentage duplication ×3 | Duplication | Medium | High | ✓ Fixed | Extracted to `presentation.js` |
+| Q-14 | formatPercentage duplication ×3 | Duplication | Medium | High | ✓ Fixed | Extracted to `shared/dom.js` |
 | Q-15 | JS: renderNoPairs dense boolean | Readability | Low | High | Skipped | Extract to named const (cosmetic) |
 
 **Итоги:**
@@ -36,7 +36,7 @@ Historical review note: каталог качества кода, дублика
 
 | Что | Было | Стало | Статус |
 |-----|-----|-------|--------|
-| Week-link на Timeline | 4 реализации в 4 модулях | 1 в `presentation.js` | ✓ |
+| Week-link на Timeline | 4 реализации в 4 модулях | 1 в `shared/dom.js` | ✓ |
 | `formatPercentage` | 3 копии в JS | 1 функция | ✓ |
 | `formatWeekLabel` | 17 сборок `Week ${w}, ${y}` | 1 функция | ✓ |
 | `_weeks_are_consecutive` | В `paused_streaks.py` и `condition_history.py` | Shared в `history.py` | ✓ |
@@ -127,15 +127,15 @@ Historical review note: каталог качества кода, дублика
 - **Почему:** Единый источник истины, нет дрейфа в дубликатах
 
 ### 3. `refactor: share history presentation helpers`
-- **Файлы:** `src/traect/web/static/js/presentation.js`, `focus-history.js`, `condition-history.js`, `tradeoff-history.js`, `timeline.js`
+- **Файлы:** `src/traect/web/static/js/shared/dom.js`, `focus-history.js`, `condition-history.js`, `tradeoff-history.js`, `timeline.js`
 - **Что:** 
-  - `formatPercentage()` → `presentation.js`
-  - `formatWeekLabel()` → `presentation.js`
-  - `createTimelineWeekLink()` → `presentation.js`
+  - `formatPercentage()` → `shared/dom.js`
+  - `formatWeekLabel()` → `shared/dom.js`
+  - `createTimelineWeekLink()` → `shared/dom.js`
 - **Почему:** 4→1 реализация ссылки на Timeline, 3→1 percentage formatter, ~15→1 week label
 
 ### 4. `refactor: clarify history cache invalidation`
-- **Файлы:** `src/traect/web/static/app.js`
+- **Файлы:** `src/traect/web/static/js/app.js`
 - **Что:** 
   - `invalidateHistoryCaches({includeTimeline})` helper function
   - Comment: Timeline renders snapshot names, updates only after review save; history aggregations read current metadata, update on any Domain change

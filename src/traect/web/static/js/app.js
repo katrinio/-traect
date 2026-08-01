@@ -1,18 +1,18 @@
-import { fetchJSON } from "/js/api.js";
-import { mapConditionHistory, renderConditionHistory } from "/js/condition-history.js";
-import { renderCurrent } from "/js/current.js";
-import { renderDomainManagement } from "/js/domains.js";
-import { mapFocusHistory, renderFocusHistory } from "/js/focus-history.js";
+import { fetchJSON } from "/js/shared/api.js";
+import { mapConditionHistory, renderConditionHistory } from "/js/pages/patterns/condition-history.js";
+import { renderCurrent } from "/js/pages/current/current.js";
+import { renderDomainManagement } from "/js/pages/domains/domains.js";
+import { mapFocusHistory, renderFocusHistory } from "/js/pages/patterns/focus-history.js";
 import {
   activeDomains,
   hasDuplicateNames,
   setStatus,
   withStatus,
-} from "/js/presentation.js";
-import { collectReviewPayload, renderReview } from "/js/review.js";
-import { renderSetup } from "/js/setup.js";
-import { mapTimelineHistory, renderTimeline } from "/js/timeline.js";
-import { mapTradeoffHistory, renderTradeoffHistory } from "/js/tradeoff-history.js";
+} from "/js/shared/dom.js";
+import { collectReviewPayload, renderReview } from "/js/pages/weekly-review/review.js";
+import { renderSetup } from "/js/pages/setup/setup.js";
+import { mapTimelineHistory, renderTimeline } from "/js/pages/history/timeline.js";
+import { mapTradeoffHistory, renderTradeoffHistory } from "/js/pages/patterns/tradeoff-history.js";
 
 const storageKey = "traect.workspace_id";
 

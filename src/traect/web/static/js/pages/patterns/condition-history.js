@@ -4,7 +4,7 @@ import {
   formatPercentage,
   formatWeekLabel,
   setStatus,
-} from "/js/presentation.js";
+} from "/js/shared/dom.js";
 
 export function mapConditionHistory(payload) {
   if (!payload || !payload.range || !Array.isArray(payload.domains) || !payload.integrity) {

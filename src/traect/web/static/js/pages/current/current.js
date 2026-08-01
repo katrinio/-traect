@@ -1,5 +1,5 @@
-import { attentionPresentation, conditionPresentation, escapeHtml } from "/js/presentation.js";
-import { renderCurrentTradeOff } from "/js/tradeoff.js";
+import { attentionPresentation, conditionPresentation, escapeHtml } from "/js/shared/dom.js";
+import { renderCurrentTradeOff } from "/js/shared/tradeoff.js";
 
 export function renderCurrent(elements, domains, review, allDomains = domains) {
   if (!elements.groups) return;
