@@ -5,7 +5,7 @@ import {
   escapeHtml,
   selectedNumber,
   summaryOptions,
-} from "/js/presentation.js";
+} from "/js/shared/dom.js";
 
 export function renderReview(container, domains, review) {
   if (!container) return;
@@ -52,9 +52,13 @@ function renderEditRow(domain, currentState) {
   const minimumAcceptableLevel = domain.minimum_acceptable_level;
   const minimumContextId = `minimum-level-context-${domain.id}`;
   const minimumContext = minimumAcceptableLevel ? `
-    <span class="minimum-level-context" id="${minimumContextId}">
-      <span class="minimum-level-label">Minimum acceptable level</span>
-      <span class="minimum-level-value">${escapeHtml(minimumAcceptableLevel)}</span>
+    <span class="minimum-level-popover-wrap">
+      <button class="minimum-level-trigger" type="button" aria-label="Show minimum acceptable level for ${escapeHtml(domain.name)}"
+        aria-expanded="false" aria-controls="${minimumContextId}">🚩</button>
+      <span class="minimum-level-popover" id="${minimumContextId}" role="tooltip" hidden>
+        <span class="minimum-level-title">🚩 Minimum acceptable level</span>
+        <span class="minimum-level-value">${escapeHtml(minimumAcceptableLevel)}</span>
+      </span>
     </span>
   ` : "";
   const isInitialized = currentState?.starting_condition !== null && currentState?.starting_condition !== undefined;
@@ -62,22 +66,21 @@ function renderEditRow(domain, currentState) {
   row.className = "domain";
   row.innerHTML = `
     <div class="domain-head">
-      <div class="domain-name">${escapeHtml(domain.name)}</div>
+      <div class="domain-name">${escapeHtml(domain.name)}${minimumContext}</div>
     </div>
     <div class="domain-grid">
-      <label>Attention this week
+      <label>Attention
         <select name="attention_${domain.id}">
           ${attentionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
-      <label>Condition at start
-        ${minimumContext}
-        <select name="starting_condition_${domain.id}" ${isInitialized ? "disabled" : ""} ${minimumAcceptableLevel ? `aria-describedby="${minimumContextId}"` : ""}>
+      <label>Current state
+        <select name="starting_condition_${domain.id}" ${isInitialized ? "disabled" : ""}>
           ${conditionOptions().map(([value, label]) => `<option value="${value}">${label}</option>`).join("")}
         </select>
       </label>
       <details class="domain-context full" ${comment ? "open" : ""}>
-        <summary>${comment ? "Edit context" : "Add context"}</summary>
+        <summary>${comment ? "Edit context" : "Notes"}</summary>
         <label class="context-field">Context
           <textarea name="comment_${domain.id}" maxlength="${commentLimit}"
             placeholder="What explains this attention choice or condition?"></textarea>
@@ -91,11 +94,13 @@ function renderEditRow(domain, currentState) {
   const commentInput = row.querySelector(`textarea[name="comment_${domain.id}"]`);
   const commentSummary = row.querySelector(".domain-context summary");
   const characterCount = row.querySelector(".character-count");
+  const minimumTrigger = row.querySelector(".minimum-level-trigger");
 
   attentionSelect.value = currentState?.attention || "paused";
   startingConditionSelect.value = currentState?.starting_condition || "stable";
   commentInput.value = comment;
   updateCommentContext(commentInput, commentSummary, characterCount);
+  if (minimumTrigger) bindMinimumLevelPopover(row, minimumTrigger);
 
   attentionSelect.addEventListener("change", () => {
     if (attentionSelect.value === "primary_focus") {
@@ -106,6 +111,59 @@ function renderEditRow(domain, currentState) {
   });
   commentInput.addEventListener("input", () => updateCommentContext(commentInput, commentSummary, characterCount));
   return row;
+}
+
+function bindMinimumLevelPopover(row, trigger) {
+  const popover = row.querySelector(`#${trigger.getAttribute("aria-controls")}`);
+  if (!popover) return;
+  const popoverWrap = trigger.closest(".minimum-level-popover-wrap");
+  const canHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  let clickedOpen = false;
+
+  const setOpen = (open) => {
+    popover.hidden = !open;
+    trigger.setAttribute("aria-expanded", String(open));
+    trigger.classList.toggle("is-open", open);
+  };
+
+  trigger.addEventListener("click", () => {
+    clickedOpen = trigger.getAttribute("aria-expanded") !== "true";
+    setOpen(clickedOpen);
+  });
+
+  if (canHover) {
+    trigger.addEventListener("mouseenter", () => setOpen(true));
+    trigger.addEventListener("mouseleave", () => {
+      if (!clickedOpen) setOpen(false);
+    });
+    popover.addEventListener("mouseenter", () => setOpen(true));
+    popover.addEventListener("mouseleave", () => {
+      if (!clickedOpen) setOpen(false);
+    });
+  }
+
+  document.addEventListener("click", (event) => {
+    if (!popoverWrap.contains(event.target)) {
+      clickedOpen = false;
+      setOpen(false);
+    }
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      clickedOpen = false;
+      setOpen(false);
+      trigger.focus();
+    }
+  });
+
+  popover.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      clickedOpen = false;
+      setOpen(false);
+      trigger.focus();
+    }
+  });
 }
 
 function enforceSinglePrimaryFocus(primaryFocusId) {
@@ -147,6 +205,6 @@ function synchronizeTradeOffReason() {
 
 function updateCommentContext(input, summary, counter) {
   const length = input.value.length;
-  summary.textContent = length > 0 ? "Edit context" : "Add context";
+  summary.textContent = length > 0 ? "Edit context" : "Notes";
   counter.textContent = `${length} / ${commentLimit}`;
 }

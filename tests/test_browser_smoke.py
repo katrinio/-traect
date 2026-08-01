@@ -224,12 +224,20 @@ def test_edit_review_shows_minimum_level_only_for_configured_domain(page: Page, 
 
     health = page.locator("#review-domains .domain").filter(has_text="Health")
     work = page.locator("#review-domains .domain").filter(has_text="Work")
-    expect(health.get_by_text("Minimum acceptable level", exact=True)).to_be_visible()
-    expect(health.get_by_text("Keep essential care manageable.", exact=True)).to_be_visible()
-    expect(health.get_by_role("combobox", name="Condition now")).to_have_attribute(
-        "aria-describedby",
-        f"minimum-level-context-{domains['Health']}",
-    )
+    trigger = health.get_by_role("button", name="Show minimum acceptable level for Health")
+    popover = page.locator(f"#minimum-level-context-{domains['Health']}")
+    expect(trigger).to_be_visible()
+    expect(trigger).to_have_attribute("aria-expanded", "false")
+    expect(popover).to_be_hidden()
+
+    trigger.click()
+    expect(trigger).to_have_attribute("aria-expanded", "true")
+    expect(popover.get_by_text("Minimum acceptable level", exact=True)).to_be_visible()
+    expect(popover.get_by_text("Keep essential care manageable.", exact=True)).to_be_visible()
+    trigger.click()
+    expect(popover).to_be_hidden()
+
+    assert health.get_by_role("combobox", name="Current state").get_attribute("aria-describedby") is None
     expect(work.locator(".minimum-level-context")).to_have_count(0)
     expect(page.locator("#current-view .minimum-level-context")).to_have_count(0)
 
@@ -246,7 +254,8 @@ def test_minimum_level_renders_multiline_html_like_text_safely_on_mobile(page: P
     page.goto(live_app)
     page.get_by_role("button", name="Start review").click()
 
-    context = page.locator(".minimum-level-context")
+    page.get_by_role("button", name="Show minimum acceptable level for Home").click()
+    context = page.locator(".minimum-level-popover")
     expect(context).to_contain_text("<img src=x onerror=alert(1)>")
     expect(context.locator("img")).to_have_count(0)
     assert context.evaluate("element => element.scrollWidth <= element.clientWidth")

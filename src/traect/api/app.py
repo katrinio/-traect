@@ -122,7 +122,7 @@ def _serve_root(
 ) -> list[bytes]:
     with session_factory() as session:
         workspace_exists = session.execute(select(Workspace.id)).first() is not None
-    template = "templates/app.html" if workspace_exists else "templates/setup.html"
+    template = "templates/pages/app.html" if workspace_exists else "templates/pages/setup.html"
     body = (WEB_ROOT / template).read_text(encoding="utf-8")
     version = get_version_string()
     body = _inject_version(body, version)
@@ -132,11 +132,11 @@ def _serve_root(
 def _inject_version(html: str, version: str) -> str:
     """Inject version query parameter into static asset URLs for cache busting."""
     replacements = [
-        ('href="/tokens.css"', f'href="/tokens.css?v={version}"'),
-        ('href="/typography.css"', f'href="/typography.css?v={version}"'),
-        ('href="/layout.css"', f'href="/layout.css?v={version}"'),
-        ('href="/components.css"', f'href="/components.css?v={version}"'),
-        ('src="/app.js', f'src="/app.js?v={version}'),
+        ('href="/css/base/tokens.css"', f'href="/css/base/tokens.css?v={version}"'),
+        ('href="/css/base/typography.css"', f'href="/css/base/typography.css?v={version}"'),
+        ('href="/css/pages/app.css"', f'href="/css/pages/app.css?v={version}"'),
+        ('href="/css/components.css"', f'href="/css/components.css?v={version}"'),
+        ('src="/js/app.js', f'src="/js/app.js?v={version}'),
         ('href="/sw.js', f'href="/sw.js?v={version}'),
     ]
     for old, new in replacements:
@@ -156,12 +156,14 @@ def _serve_static(start_response: Callable[..., Any], method: str, path: str) ->
             body = candidate.read_text(encoding="utf-8")
             return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", body)
         return None
+    if clean_path.startswith("/css/"):
+        static_root = (WEB_ROOT / "static" / "css").resolve()
+        candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
+        if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix == ".css":
+            body = candidate.read_text(encoding="utf-8")
+            return _respond(start_response, "200 OK", "text/css; charset=utf-8", body)
+        return None
     mapping = {
-        "/tokens.css": ("static/tokens.css", "text/css; charset=utf-8"),
-        "/typography.css": ("static/typography.css", "text/css; charset=utf-8"),
-        "/layout.css": ("static/layout.css", "text/css; charset=utf-8"),
-        "/components.css": ("static/components.css", "text/css; charset=utf-8"),
-        "/app.js": ("static/app.js", "text/javascript; charset=utf-8"),
         "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
         "/icon.svg": ("static/icon.svg", "image/svg+xml"),

@@ -576,12 +576,17 @@ def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) ->
 def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path) -> None:
     app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
 
-    module = _request(app, "GET", "/js/api.js")
-    traversal = _request(app, "GET", "/js/../app.js")
+    module = _request(app, "GET", "/js/shared/api.js")
+    traversal = _request(app, "GET", "/js/../icon.svg")
+    stylesheet = _request(app, "GET", "/css/base/tokens.css")
+    css_traversal = _request(app, "GET", "/css/../icon.svg")
 
     assert module["status"].startswith("200")
     assert "text/javascript" in module["headers"]
     assert traversal["status"].startswith("404")
+    assert stylesheet["status"].startswith("200")
+    assert "text/css" in stylesheet["headers"]
+    assert css_traversal["status"].startswith("404")
 
 
 def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:

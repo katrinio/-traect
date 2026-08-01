@@ -1,4 +1,4 @@
-import { createTimelineWeekLink, formatPercentage, formatWeekLabel, setStatus } from "/js/presentation.js";
+import { createTimelineWeekLink, formatPercentage, formatWeekLabel, setStatus } from "/js/shared/dom.js";
 
 export function mapTradeoffHistory(payload) {
   if (!payload || !payload.summary || !payload.range || !payload.integrity) {

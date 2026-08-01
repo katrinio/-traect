@@ -49,12 +49,16 @@ Backend разделён по уровню ответственности:
 
 Frontend использует небольшие нативные ES-модули без framework:
 
-- `static/app.js` — единое состояние приложения, навигация и orchestration;
-- `static/js/api.js` — HTTP client;
-- `static/js/presentation.js` — общие labels и DOM helpers;
-- `static/js/current.js`, `timeline.js`, `focus-history.js`, `condition-history.js`, `tradeoff-history.js`, `review.js`, `domains.js`, `setup.js` — отдельные экранные сценарии;
-- `static/js/tradeoff.js` — общий read-only weekly trade-off.
+- `templates/pages/` — полные HTML-страницы, которые backend отдаёт как root view;
+- `static/css/base/` — tokens и базовая типографика;
+- `static/css/components.css` — переиспользуемые контролы и UI patterns;
+- `static/css/pages/app.css` — layout и стили экранов основного приложения;
+- `static/js/app.js` — единое состояние приложения, навигация и orchestration;
+- `static/js/shared/api.js` — HTTP client;
+- `static/js/shared/dom.js` — общие labels, formatters и DOM helpers;
+- `static/js/shared/tradeoff.js` — общий read-only weekly trade-off для Current и Timeline;
+- `static/js/pages/**` — отдельные экранные сценарии: Current, History, Patterns, Weekly Review, Domains и Setup.
 
-Экранный модуль не должен самостоятельно выбирать Workspace или вычислять текущую неделю. Эти данные приходят из `app.js` и backend API. Общая логика выносится только после появления реального повторного использования; абстракции для будущих charts или framework-компонентов заранее не создаются.
+Экранный модуль не должен самостоятельно выбирать Workspace или вычислять текущую неделю. Эти данные приходят из `static/js/app.js` и backend API. Общая логика выносится только после появления реального повторного использования; абстракции для будущих charts или framework-компонентов заранее не создаются.
 
 Общие frozen-clock и WSGI helpers тестов находятся в `tests/support.py`. Browser helpers остаются рядом со smoke-тестами, поскольку описывают только пользовательский поток.

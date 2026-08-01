@@ -1,4 +1,4 @@
-import { bySortOrder, escapeHtml, minimumAcceptableLevelLimit } from "/js/presentation.js";
+import { bySortOrder, escapeHtml, minimumAcceptableLevelLimit } from "/js/shared/dom.js";
 
 export function renderDomainManagement(elements, domains, callbacks) {
   if (!elements.active || !elements.archived) return;

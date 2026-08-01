@@ -826,19 +826,6 @@ section {
   grid-column: auto;
 }
 
-.minimum-level-context {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-1) 0;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 400;
-}
-
-.minimum-level-label {
-  font-weight: 600;
-}
-
 .minimum-level-value {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -854,6 +841,71 @@ section {
 .domain:first-child {
   padding-top: 0;
   border-top: 0;
+}
+
+.domain-head .domain-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  position: relative;
+}
+
+.minimum-level-popover-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.minimum-level-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  min-height: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  line-height: 1;
+  opacity: 0.72;
+  padding: 0;
+}
+
+.minimum-level-trigger:hover,
+.minimum-level-trigger.is-open {
+  background: var(--surface);
+  opacity: 1;
+}
+
+.minimum-level-popover {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  z-index: 10;
+  display: grid;
+  gap: var(--space-2);
+  width: min(18rem, calc(100vw - 2rem));
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 12%);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.minimum-level-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.minimum-level-popover .minimum-level-value {
+  color: var(--text-muted);
 }
 
 .domain-grid {
