@@ -36,12 +36,13 @@ def _raw_request(app: Any, method: str, path: str) -> dict[str, Any]:
         status_line = status
         headers = response_headers
 
+    path_info, _, query_string = path.partition("?")
     response_body = b"".join(
         app(
             {
                 "REQUEST_METHOD": method,
-                "PATH_INFO": path,
-                "QUERY_STRING": "",
+                "PATH_INFO": path_info,
+                "QUERY_STRING": query_string,
                 "CONTENT_LENGTH": "0",
                 "wsgi.input": BytesIO(),
             },
@@ -644,35 +645,55 @@ def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) ->
 def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path) -> None:
     app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
 
+    root = _request(app, "GET", "/")
     module = _request(app, "GET", "/js/shared/api.js")
+    versioned_module = _request(app, "GET", "/js/app.js?v=test")
     traversal = _request(app, "GET", "/js/../icons.svg")
     stylesheet = _request(app, "GET", "/css/base/tokens.css")
+    versioned_stylesheet = _request(app, "GET", "/css/base/tokens.css?v=test")
     css_traversal = _request(app, "GET", "/css/../icons.svg")
-    favicon = _raw_request(app, "GET", "/icons/favicon.ico")
+    favicon = _raw_request(app, "GET", "/icons/favicon.ico?v=test")
     pwa_icon = _raw_request(app, "GET", "/icons/pwa-icon-192x192.png")
     pinned_tab = _raw_request(app, "GET", "/icons/safari-pinned-tab.svg")
     icon_traversal = _request(app, "GET", "/icons/../manifest.webmanifest")
     manifest = _request(app, "GET", "/manifest.webmanifest")
+    service_worker = _request(app, "GET", "/sw.js")
 
+    assert "no-cache, no-store, must-revalidate" in root["headers"]
     assert module["status"].startswith("200")
     assert "text/javascript" in module["headers"]
+    assert "Cache-Control', 'no-cache" in module["headers"]
+    assert "ETag" in module["headers"]
+    assert "Last-Modified" in module["headers"]
+    assert versioned_module["status"].startswith("200")
+    assert "public, max-age=31536000, immutable" in versioned_module["headers"]
     assert traversal["status"].startswith("404")
     assert stylesheet["status"].startswith("200")
     assert "text/css" in stylesheet["headers"]
+    assert "Cache-Control', 'no-cache" in stylesheet["headers"]
+    assert versioned_stylesheet["status"].startswith("200")
+    assert "public, max-age=31536000, immutable" in versioned_stylesheet["headers"]
     assert css_traversal["status"].startswith("404")
     assert favicon["status"].startswith("200")
     assert favicon["headers"]["Content-Type"] == "image/x-icon"
+    assert favicon["headers"]["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert "ETag" in favicon["headers"]
+    assert "Last-Modified" in favicon["headers"]
     assert pwa_icon["status"].startswith("200")
     assert pwa_icon["headers"]["Content-Type"] == "image/png"
+    assert pwa_icon["headers"]["Cache-Control"] == "no-cache"
     assert pinned_tab["status"].startswith("200")
     assert pinned_tab["headers"]["Content-Type"] == "image/svg+xml"
     assert icon_traversal["status"].startswith("404")
+    assert "Cache-Control', 'no-cache" in manifest["headers"]
+    assert "Cache-Control', 'no-cache" in service_worker["headers"]
     manifest_body = json.loads(manifest["body"])
     assert manifest_body["theme_color"] == "#1D1E20"
     assert manifest_body["background_color"] == "#1D1E20"
     assert {icon["sizes"] for icon in manifest_body["icons"]} >= {"192x192", "256x256", "384x384", "512x512"}
     assert any(icon["purpose"] == "maskable" for icon in manifest_body["icons"])
     assert all(icon["src"].startswith("/icons/") for icon in manifest_body["icons"])
+    assert all("?v=" in icon["src"] for icon in manifest_body["icons"])
 
 
 def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:
