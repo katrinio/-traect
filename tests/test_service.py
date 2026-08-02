@@ -5,6 +5,7 @@ import re
 import shutil
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -24,6 +25,30 @@ from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput, get_week_initialization_state
 from traect.domain.enums import DomainAttention, DomainCondition, ReviewLifecycle
 from traect.domain.models import Week, WeekDomainState
+
+
+def _raw_request(app: Any, method: str, path: str) -> dict[str, Any]:
+    status_line = ""
+    headers: list[tuple[str, str]] = []
+
+    def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+        nonlocal status_line, headers
+        status_line = status
+        headers = response_headers
+
+    response_body = b"".join(
+        app(
+            {
+                "REQUEST_METHOD": method,
+                "PATH_INFO": path,
+                "QUERY_STRING": "",
+                "CONTENT_LENGTH": "0",
+                "wsgi.input": BytesIO(),
+            },
+            start_response,
+        )
+    )
+    return {"status": status_line, "headers": dict(headers), "body": response_body}
 
 
 @pytest.fixture
@@ -611,15 +636,23 @@ def test_root_navigation_exposes_current_timeline_and_domains(tmp_path: Path) ->
     assert "Domains" in response["body"]
     assert "Workspace Setup / Domains" not in response["body"]
     assert "Workspace setup" not in response["body"]
+    assert "/icons/favicon.ico" in response["body"]
+    assert "/icons/apple-touch-icon-180x180.png" in response["body"]
+    assert "/icons/safari-pinned-tab.svg" in response["body"]
 
 
 def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path) -> None:
     app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
 
     module = _request(app, "GET", "/js/shared/api.js")
-    traversal = _request(app, "GET", "/js/../icon.svg")
+    traversal = _request(app, "GET", "/js/../icons.svg")
     stylesheet = _request(app, "GET", "/css/base/tokens.css")
-    css_traversal = _request(app, "GET", "/css/../icon.svg")
+    css_traversal = _request(app, "GET", "/css/../icons.svg")
+    favicon = _raw_request(app, "GET", "/icons/favicon.ico")
+    pwa_icon = _raw_request(app, "GET", "/icons/pwa-icon-192x192.png")
+    pinned_tab = _raw_request(app, "GET", "/icons/safari-pinned-tab.svg")
+    icon_traversal = _request(app, "GET", "/icons/../manifest.webmanifest")
+    manifest = _request(app, "GET", "/manifest.webmanifest")
 
     assert module["status"].startswith("200")
     assert "text/javascript" in module["headers"]
@@ -627,6 +660,19 @@ def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path
     assert stylesheet["status"].startswith("200")
     assert "text/css" in stylesheet["headers"]
     assert css_traversal["status"].startswith("404")
+    assert favicon["status"].startswith("200")
+    assert favicon["headers"]["Content-Type"] == "image/x-icon"
+    assert pwa_icon["status"].startswith("200")
+    assert pwa_icon["headers"]["Content-Type"] == "image/png"
+    assert pinned_tab["status"].startswith("200")
+    assert pinned_tab["headers"]["Content-Type"] == "image/svg+xml"
+    assert icon_traversal["status"].startswith("404")
+    manifest_body = json.loads(manifest["body"])
+    assert manifest_body["theme_color"] == "#1D1E20"
+    assert manifest_body["background_color"] == "#1D1E20"
+    assert {icon["sizes"] for icon in manifest_body["icons"]} >= {"192x192", "256x256", "384x384", "512x512"}
+    assert any(icon["purpose"] == "maskable" for icon in manifest_body["icons"])
+    assert all(icon["src"].startswith("/icons/") for icon in manifest_body["icons"])
 
 
 def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:

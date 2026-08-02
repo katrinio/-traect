@@ -100,6 +100,11 @@ def _respond(start_response: Callable[..., Any], status: str, content_type: str,
     return [body.encode()]
 
 
+def _bytes_response(start_response: Callable[..., Any], status: str, content_type: str, body: bytes) -> list[bytes]:
+    start_response(status, [("Content-Type", content_type), ("Cache-Control", "no-cache")])
+    return [body]
+
+
 def _json_response(start_response: Callable[..., Any], status: str, payload: Any) -> list[bytes]:
     body = json.dumps(payload, default=_json_default)
     return _respond(start_response, status, "application/json; charset=utf-8", body)
@@ -136,6 +141,12 @@ def _inject_version(html: str, version: str) -> str:
         ('href="/css/base/typography.css"', f'href="/css/base/typography.css?v={version}"'),
         ('href="/css/pages/app.css"', f'href="/css/pages/app.css?v={version}"'),
         ('href="/css/components.css"', f'href="/css/components.css?v={version}"'),
+        ('href="/icons/favicon.ico"', f'href="/icons/favicon.ico?v={version}"'),
+        ('href="/icons/favicon-32x32.png"', f'href="/icons/favicon-32x32.png?v={version}"'),
+        ('href="/icons/favicon-16x16.png"', f'href="/icons/favicon-16x16.png?v={version}"'),
+        ('href="/icons/apple-touch-icon-180x180.png"', f'href="/icons/apple-touch-icon-180x180.png?v={version}"'),
+        ('href="/icons/safari-pinned-tab.svg"', f'href="/icons/safari-pinned-tab.svg?v={version}"'),
+        ('href="/manifest.webmanifest"', f'href="/manifest.webmanifest?v={version}"'),
         ('src="/js/app.js', f'src="/js/app.js?v={version}'),
         ('href="/sw.js', f'href="/sw.js?v={version}'),
     ]
@@ -163,10 +174,21 @@ def _serve_static(start_response: Callable[..., Any], method: str, path: str) ->
             body = candidate.read_text(encoding="utf-8")
             return _respond(start_response, "200 OK", "text/css; charset=utf-8", body)
         return None
+    if clean_path.startswith("/icons/"):
+        static_root = (WEB_ROOT / "static" / "icons").resolve()
+        candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
+        content_types = {
+            ".ico": "image/x-icon",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+        }
+        if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix in content_types:
+            binary_body = candidate.read_bytes()
+            return _bytes_response(start_response, "200 OK", content_types[candidate.suffix], binary_body)
+        return None
     mapping = {
         "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
-        "/icon.svg": ("static/icon.svg", "image/svg+xml"),
     }
     if clean_path not in mapping:
         return None
