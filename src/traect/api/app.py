@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 from collections.abc import Callable, Mapping
 from datetime import date, datetime
+from email.utils import formatdate
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs
@@ -47,7 +49,7 @@ def build_app(
             return _health_response(start_response, engine)
         if method == "GET" and path in {"/", "/index.html"}:
             return _serve_root(start_response, session_factory)
-        static = _serve_static(start_response, method, path)
+        static = _serve_static(start_response, method, path, str(environ.get("QUERY_STRING", "")))
         if static is not None:
             return static
         with session_factory() as session:
@@ -95,9 +97,36 @@ def build_app(
     return app
 
 
-def _respond(start_response: Callable[..., Any], status: str, content_type: str, body: str) -> list[bytes]:
-    start_response(status, [("Content-Type", content_type), ("Cache-Control", "no-cache")])
+def _respond(
+    start_response: Callable[..., Any],
+    status: str,
+    content_type: str,
+    body: str,
+    *,
+    cache_control: str = "no-cache",
+    extra_headers: list[tuple[str, str]] | None = None,
+) -> list[bytes]:
+    headers = [("Content-Type", content_type), ("Cache-Control", cache_control)]
+    if extra_headers:
+        headers.extend(extra_headers)
+    start_response(status, headers)
     return [body.encode()]
+
+
+def _bytes_response(
+    start_response: Callable[..., Any],
+    status: str,
+    content_type: str,
+    body: bytes,
+    *,
+    cache_control: str = "no-cache",
+    extra_headers: list[tuple[str, str]] | None = None,
+) -> list[bytes]:
+    headers = [("Content-Type", content_type), ("Cache-Control", cache_control)]
+    if extra_headers:
+        headers.extend(extra_headers)
+    start_response(status, headers)
+    return [body]
 
 
 def _json_response(start_response: Callable[..., Any], status: str, payload: Any) -> list[bytes]:
@@ -126,7 +155,13 @@ def _serve_root(
     body = (WEB_ROOT / template).read_text(encoding="utf-8")
     version = get_version_string()
     body = _inject_version(body, version)
-    return _respond(start_response, "200 OK", "text/html; charset=utf-8", body)
+    return _respond(
+        start_response,
+        "200 OK",
+        "text/html; charset=utf-8",
+        body,
+        cache_control="no-cache, no-store, must-revalidate",
+    )
 
 
 def _inject_version(html: str, version: str) -> str:
@@ -136,6 +171,12 @@ def _inject_version(html: str, version: str) -> str:
         ('href="/css/base/typography.css"', f'href="/css/base/typography.css?v={version}"'),
         ('href="/css/pages/app.css"', f'href="/css/pages/app.css?v={version}"'),
         ('href="/css/components.css"', f'href="/css/components.css?v={version}"'),
+        ('href="/icons/favicon.ico"', f'href="/icons/favicon.ico?v={version}"'),
+        ('href="/icons/favicon-32x32.png"', f'href="/icons/favicon-32x32.png?v={version}"'),
+        ('href="/icons/favicon-16x16.png"', f'href="/icons/favicon-16x16.png?v={version}"'),
+        ('href="/icons/apple-touch-icon-180x180.png"', f'href="/icons/apple-touch-icon-180x180.png?v={version}"'),
+        ('href="/icons/safari-pinned-tab.svg"', f'href="/icons/safari-pinned-tab.svg?v={version}"'),
+        ('href="/manifest.webmanifest"', f'href="/manifest.webmanifest?v={version}"'),
         ('src="/js/app.js', f'src="/js/app.js?v={version}'),
         ('href="/sw.js', f'href="/sw.js?v={version}'),
     ]
@@ -144,35 +185,110 @@ def _inject_version(html: str, version: str) -> str:
     return html
 
 
-def _serve_static(start_response: Callable[..., Any], method: str, path: str) -> list[bytes] | None:
+def _serve_static(
+    start_response: Callable[..., Any],
+    method: str,
+    path: str,
+    query_string: str = "",
+) -> list[bytes] | None:
     if method != "GET":
         return None
-    # Remove version query parameter for file lookup
-    clean_path = path.split("?")[0]
+    clean_path = path
+    cache_control = _static_cache_control(query_string)
     if clean_path.startswith("/js/"):
         static_root = (WEB_ROOT / "static" / "js").resolve()
         candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
         if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix == ".js":
             body = candidate.read_text(encoding="utf-8")
-            return _respond(start_response, "200 OK", "text/javascript; charset=utf-8", body)
+            return _respond(
+                start_response,
+                "200 OK",
+                "text/javascript; charset=utf-8",
+                body,
+                cache_control=cache_control,
+                extra_headers=_file_cache_headers(candidate),
+            )
         return None
     if clean_path.startswith("/css/"):
         static_root = (WEB_ROOT / "static" / "css").resolve()
         candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
         if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix == ".css":
             body = candidate.read_text(encoding="utf-8")
-            return _respond(start_response, "200 OK", "text/css; charset=utf-8", body)
+            return _respond(
+                start_response,
+                "200 OK",
+                "text/css; charset=utf-8",
+                body,
+                cache_control=cache_control,
+                extra_headers=_file_cache_headers(candidate),
+            )
         return None
+    if clean_path.startswith("/icons/"):
+        static_root = (WEB_ROOT / "static" / "icons").resolve()
+        candidate = (WEB_ROOT / "static" / clean_path.removeprefix("/")).resolve()
+        content_types = {
+            ".ico": "image/x-icon",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+        }
+        if candidate.is_relative_to(static_root) and candidate.is_file() and candidate.suffix in content_types:
+            binary_body = candidate.read_bytes()
+            return _bytes_response(
+                start_response,
+                "200 OK",
+                content_types[candidate.suffix],
+                binary_body,
+                cache_control=cache_control,
+                extra_headers=_file_cache_headers(candidate),
+            )
+        return None
+    if clean_path == "/manifest.webmanifest":
+        manifest = WEB_ROOT / "static" / "manifest.webmanifest"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        version = get_version_string()
+        for icon in payload.get("icons", []):
+            src = icon.get("src")
+            if isinstance(src, str) and src.startswith("/icons/") and "?" not in src:
+                icon["src"] = f"{src}?v={version}"
+        body = json.dumps(payload, indent=2)
+        return _respond(
+            start_response,
+            "200 OK",
+            "application/manifest+json",
+            body,
+            cache_control="no-cache",
+            extra_headers=_file_cache_headers(manifest),
+        )
     mapping = {
-        "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
         "/sw.js": ("static/sw.js", "text/javascript; charset=utf-8"),
-        "/icon.svg": ("static/icon.svg", "image/svg+xml"),
     }
     if clean_path not in mapping:
         return None
     relative_path, content_type = mapping[clean_path]
-    body = (WEB_ROOT / relative_path).read_text(encoding="utf-8")
-    return _respond(start_response, "200 OK", content_type, body)
+    candidate = WEB_ROOT / relative_path
+    body = candidate.read_text(encoding="utf-8")
+    return _respond(
+        start_response,
+        "200 OK",
+        content_type,
+        body,
+        cache_control="no-cache",
+        extra_headers=_file_cache_headers(candidate),
+    )
+
+
+def _static_cache_control(query_string: str) -> str:
+    has_version = any(part.startswith("v=") and len(part) > 2 for part in query_string.split("&"))
+    return "public, max-age=31536000, immutable" if has_version else "no-cache"
+
+
+def _file_cache_headers(path: Path) -> list[tuple[str, str]]:
+    stat = path.stat()
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    return [
+        ("ETag", f'"{digest}"'),
+        ("Last-Modified", formatdate(stat.st_mtime, usegmt=True)),
+    ]
 
 
 def _json_default(value: Any) -> Any:
