@@ -1,6 +1,11 @@
 services:
   traect:
     image: ghcr.io/katrinio/traect:latest
+    build:
+      context: .
+      target: production
+      args:
+        TRAECT_VERSION: ${TRAECT_VERSION:?TRAECT_VERSION must be set to a commit SHA, git tag, or build id}
     container_name: traect
 
     labels:
@@ -13,6 +18,8 @@ services:
     environment:
       TRAECT_HOST: 0.0.0.0
       TRAECT_PORT: 8000
+      TRAECT_ENV: production
+      TRAECT_VERSION: ${TRAECT_VERSION:?TRAECT_VERSION must be set to a commit SHA, git tag, or build id}
       TRAECT_DATABASE_URL: sqlite:////data/traect.db
       TRAECT_TIMEZONE: Europe/Belgrade
     volumes:

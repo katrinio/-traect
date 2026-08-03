@@ -19,7 +19,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from tests.support import MutableClock, week_clock
 from tests.support import wsgi_request as _request
-from traect.api.app import build_app, server_address_from_environment
+from traect.api.app import VERSIONED_HTML_ASSETS, build_app, server_address_from_environment
+from traect.api.version import AssetVersionError, get_version_string
 from traect.app.database import MIGRATIONS_ROOT, create_schema, migrate_schema
 from traect.app.errors import ConflictError, ValidationError
 from traect.app.service import TraectService, WeekStateInput, get_week_initialization_state
@@ -586,7 +587,7 @@ def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> No
 
 
 def test_reset_history_clears_weeks_without_touching_domains(tmp_path: Path) -> None:
-    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}", clock=lambda: week_clock(2026, 31))
     _request(
         app,
         "POST",
@@ -694,6 +695,51 @@ def test_frontend_modules_are_served_without_exposing_other_paths(tmp_path: Path
     assert any(icon["purpose"] == "maskable" for icon in manifest_body["icons"])
     assert all(icon["src"].startswith("/icons/") for icon in manifest_body["icons"])
     assert all("?v=" in icon["src"] for icon in manifest_body["icons"])
+
+
+def test_production_requires_non_local_asset_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRAECT_ENV", "production")
+    monkeypatch.delenv("TRAECT_VERSION", raising=False)
+    monkeypatch.setattr("traect.api.version.Path.exists", lambda self: False)
+
+    with pytest.raises(AssetVersionError, match="TRAECT_VERSION must be set"):
+        get_version_string()
+
+    monkeypatch.setenv("TRAECT_VERSION", "local")
+
+    with pytest.raises(AssetVersionError, match="TRAECT_VERSION must be set"):
+        get_version_string()
+
+
+def test_pwa_resources_share_single_release_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    version = "release-2026-08-03-abcdef"
+    monkeypatch.setenv("TRAECT_VERSION", version)
+    monkeypatch.delenv("TRAECT_ENV", raising=False)
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+
+    root = _request(app, "GET", "/")
+    _request(app, "POST", "/workspaces", body=b'{"name":"Life","domains":[{"name":"Work"}]}')
+    app_root = _request(app, "GET", "/")
+    manifest = _request(app, "GET", "/manifest.webmanifest?v=old-cache-key")
+    manifest_body = json.loads(manifest["body"])
+
+    for asset in VERSIONED_HTML_ASSETS:
+        assert f"{asset}?v={version}" in root["body"]
+        assert f"{asset}?v={version}" in app_root["body"]
+
+    assert "/sw.js?v=" not in root["body"]
+    assert "/sw.js?v=" not in app_root["body"]
+    assert {icon["src"].split("?v=", 1)[1] for icon in manifest_body["icons"]} == {version}
+    assert {icon["src"].split("?v=", 1)[0] for icon in manifest_body["icons"]} == {
+        "/icons/pwa-icon-192x192.png",
+        "/icons/pwa-icon-256x256.png",
+        "/icons/pwa-icon-384x384.png",
+        "/icons/pwa-icon-512x512.png",
+        "/icons/pwa-maskable-192x192.png",
+        "/icons/pwa-maskable-512x512.png",
+    }
+    assert "Cache-Control', 'no-cache, no-store, must-revalidate" in root["headers"]
+    assert "Cache-Control', 'no-cache" in manifest["headers"]
 
 
 def test_migrated_schema_allows_reusing_an_archived_domain_name(tmp_path: Path) -> None:
