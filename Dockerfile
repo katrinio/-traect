@@ -41,13 +41,19 @@ RUN poetry run playwright install chromium --with-deps && \
 # Production stage
 FROM base AS production
 
+ARG TRAECT_VERSION
+
 ENV TRAECT_HOST=0.0.0.0 \
     TRAECT_PORT=8000 \
-    TRAECT_DATABASE_URL=sqlite:////data/traect.db
+    TRAECT_DATABASE_URL=sqlite:////data/traect.db \
+    TRAECT_ENV=production \
+    TRAECT_VERSION=${TRAECT_VERSION}
 
 COPY README.md alembic.ini ./
 COPY src ./src
 COPY migrations ./migrations
+
+RUN python -c "from traect.api.version import get_version_string; get_version_string()"
 
 RUN poetry install --only main \
     && useradd --create-home --uid 10001 traect \

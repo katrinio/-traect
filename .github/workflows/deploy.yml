@@ -45,6 +45,9 @@ jobs:
         with:
           context: .
           push: true
+          target: production
+          build-args: |
+            TRAECT_VERSION=${{ github.sha }}
           tags: ghcr.io/katrinio/traect:latest
 
       - name: Deploy Traect via SSH
@@ -62,6 +65,7 @@ jobs:
 
             git fetch origin main
             git reset --hard origin/main
+            export TRAECT_VERSION="$(git rev-parse HEAD)"
 
             docker compose down --remove-orphans --volumes
             docker system prune -f

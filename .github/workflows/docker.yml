@@ -47,6 +47,8 @@ jobs:
           context: .
           push: true
           target: production
+          build-args: |
+            TRAECT_VERSION=${{ github.sha }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:latest
             ghcr.io/${{ github.repository_owner }}/${{ steps.repo.outputs.name }}:${{ github.sha }}

@@ -28,6 +28,20 @@ from traect.logging_utils import configure_logging
 WEB_ROOT = Path(__file__).resolve().parents[1] / "web"
 logger = logging.getLogger(__name__)
 
+VERSIONED_HTML_ASSETS = (
+    "/css/base/tokens.css",
+    "/css/base/typography.css",
+    "/css/pages/app.css",
+    "/css/components.css",
+    "/icons/favicon.ico",
+    "/icons/favicon-32x32.png",
+    "/icons/favicon-16x16.png",
+    "/icons/apple-touch-icon-180x180.png",
+    "/icons/safari-pinned-tab.svg",
+    "/manifest.webmanifest",
+    "/js/app.js",
+)
+
 
 def build_app(
     database_url: str,
@@ -166,22 +180,9 @@ def _serve_root(
 
 def _inject_version(html: str, version: str) -> str:
     """Inject version query parameter into static asset URLs for cache busting."""
-    replacements = [
-        ('href="/css/base/tokens.css"', f'href="/css/base/tokens.css?v={version}"'),
-        ('href="/css/base/typography.css"', f'href="/css/base/typography.css?v={version}"'),
-        ('href="/css/pages/app.css"', f'href="/css/pages/app.css?v={version}"'),
-        ('href="/css/components.css"', f'href="/css/components.css?v={version}"'),
-        ('href="/icons/favicon.ico"', f'href="/icons/favicon.ico?v={version}"'),
-        ('href="/icons/favicon-32x32.png"', f'href="/icons/favicon-32x32.png?v={version}"'),
-        ('href="/icons/favicon-16x16.png"', f'href="/icons/favicon-16x16.png?v={version}"'),
-        ('href="/icons/apple-touch-icon-180x180.png"', f'href="/icons/apple-touch-icon-180x180.png?v={version}"'),
-        ('href="/icons/safari-pinned-tab.svg"', f'href="/icons/safari-pinned-tab.svg?v={version}"'),
-        ('href="/manifest.webmanifest"', f'href="/manifest.webmanifest?v={version}"'),
-        ('src="/js/app.js', f'src="/js/app.js?v={version}'),
-        ('href="/sw.js', f'href="/sw.js?v={version}'),
-    ]
-    for old, new in replacements:
-        html = html.replace(old, new)
+    for asset in VERSIONED_HTML_ASSETS:
+        html = html.replace(f'href="{asset}"', f'href="{asset}?v={version}"')
+        html = html.replace(f'src="{asset}"', f'src="{asset}?v={version}"')
     return html
 
 
