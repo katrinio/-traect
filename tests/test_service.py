@@ -587,7 +587,7 @@ def test_current_workspace_route_returns_created_workspace(tmp_path: Path) -> No
 
 
 def test_reset_history_clears_weeks_without_touching_domains(tmp_path: Path) -> None:
-    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}")
+    app = build_app(f"sqlite:///{tmp_path / 'traect.db'}", clock=lambda: week_clock(2026, 31))
     _request(
         app,
         "POST",
